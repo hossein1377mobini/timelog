@@ -105,11 +105,37 @@ function loadTodayTasks() {
     existing.unshift(taskData)
     localStorage.setItem("compass_sessions", JSON.stringify(existing))
     window.dispatchEvent(new Event("storage"))
+    markTaskCompleted(runningTaskRef.current)
 
     setSeconds(0)
     setTaskName("")
     setTags([])
   }
+
+function markTaskCompleted(taskText) {
+  const records = JSON.parse(
+    localStorage.getItem("compass_daily_records") || "[]"
+  )
+
+  const today = new Date().toISOString().split("T")[0]
+
+  const record = records.find(r => r.date === today)
+
+  if (!record?.morning?.tasks) return
+
+  record.morning.tasks = record.morning.tasks.map(task =>
+    task.text === taskText
+      ? { ...task, done: true }
+      : task
+  )
+
+  localStorage.setItem(
+    "compass_daily_records",
+    JSON.stringify(records)
+  )
+
+  window.dispatchEvent(new Event("storage"))
+}
 
   function handleReset() {
     clearInterval(intervalRef.current)
@@ -141,40 +167,27 @@ function loadTodayTasks() {
         <CardTitle>Timer</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="text-[48px] font-mono font-normal text-center py-4 tracking-[-1.44px] text-[hsl(var(--body-strong))]">
+        <div className="text-5xl font-mono font-bold text-center py-4">
           {formatTime(seconds)}
         </div>
 
-<div className="flex gap-2">
-  <Input
-    placeholder="Type task name..."
-    value={taskName}
-    onChange={(e) => {
-      setTaskName(e.target.value)
-      setError("")
-    }}
-    disabled={isRunning}
-    className="flex-1 h-10"
-  />
-  <select
-    value=""
-    onChange={(e) => {
-      if (e.target.value) {
-        setTaskName(e.target.value)
-        setError("")
-      }
-    }}
-    disabled={isRunning}
-    className="w-36 h-10 rounded-[10px] border border-[hsl(var(--hairline))] bg-[hsl(var(--surface-card))] px-2 text-[13px] shrink-0 text-[hsl(var(--body-strong))] transition-colors hover:border-[hsl(var(--hairline-strong))] focus:outline-none focus:border-[hsl(var(--ring))] focus:ring-2 focus:ring-[hsl(var(--ring))]/20"
-  >
-    <option value="">Quick pick</option>
-    {todayTasks.map((task) => (
-      <option key={task.id} value={task.text}>
-        {task.text}
-      </option>
-    ))}
-  </select>
-</div>
+<select
+  value={taskName}
+  onChange={(e) => {
+    setTaskName(e.target.value)
+    setError("")
+  }}
+  disabled={isRunning}
+  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+>
+  <option value="">Select a task...</option>
+
+  {todayTasks.map((task) => (
+    <option key={task.id} value={task.text}>
+      {task.text}
+    </option>
+  ))}
+</select>
 
         <div className="flex gap-2">
           <Input
@@ -192,7 +205,7 @@ function loadTodayTasks() {
           </Button>
         </div>
         {error ? (
-          <p className="text-[13px] text-[hsl(var(--error))]">{error}</p>
+          <p className="text-sm text-destructive">{error}</p>
         ) : null}
 
         {tags.length > 0 && (
