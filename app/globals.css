@@ -1,0 +1,210 @@
+@import "tailwindcss";
+
+:root {
+  --font-sans: "Inter", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius: 8px;
+
+  --background: 48 33% 97%;
+  --foreground: 40 14% 13%;
+  --card: 0 0% 100%;
+  --card-foreground: 40 14% 13%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 40 14% 13%;
+  --primary: 20 100% 40%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 48 20% 97%;
+  --secondary-foreground: 40 14% 13%;
+  --muted: 40 8% 40%;
+  --muted-foreground: 40 8% 40%;
+  --accent: 19 100% 38%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 348 68% 44%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 40 14% 88%;
+  --input: 0 0% 100%;
+  --ring: 20 100% 40%;
+
+  --surface-card: 0 0% 100%;
+  --surface-strong: 40 14% 92%;
+  --canvas: 48 33% 97%;
+  --canvas-soft: 48 25% 97%;
+  --body: 40 10% 28%;
+  --body-strong: 40 14% 13%;
+  --hairline: 40 14% 88%;
+  --hairline-soft: 48 20% 94%;
+  --hairline-strong: 36 14% 78%;
+
+  --dash-bg: 48 33% 97%;
+
+  --timeline-thinking: 24 62% 65%;
+  --timeline-grep: 145 25% 55%;
+  --timeline-read: 210 55% 55%;
+  --timeline-edit: 270 30% 55%;
+  --timeline-done: 34 55% 45%;
+
+  --success: 160 60% 30%;
+  --error: 348 68% 44%;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-lg: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+}
+
+.dark {
+  --background: 30 10% 8%;
+  --foreground: 48 10% 92%;
+  --card: 30 8% 12%;
+  --card-foreground: 48 10% 92%;
+  --popover: 30 8% 12%;
+  --popover-foreground: 48 10% 92%;
+  --primary: 20 100% 55%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 30 8% 16%;
+  --secondary-foreground: 48 10% 92%;
+  --muted: 40 8% 65%;
+  --muted-foreground: 40 8% 65%;
+  --accent: 19 100% 48%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 345 64% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 30 8% 22%;
+  --input: 30 8% 14%;
+  --ring: 20 100% 55%;
+
+  --surface-card: 30 8% 14%;
+  --surface-strong: 30 8% 20%;
+  --canvas: 30 10% 8%;
+  --canvas-soft: 30 8% 11%;
+  --body: 40 8% 72%;
+  --body-strong: 48 10% 92%;
+  --hairline: 30 8% 22%;
+  --hairline-soft: 30 6% 16%;
+  --hairline-strong: 30 8% 30%;
+
+  --dash-bg: 30 10% 8%;
+
+  --timeline-thinking: 24 50% 60%;
+  --timeline-grep: 145 20% 50%;
+  --timeline-read: 210 40% 60%;
+  --timeline-edit: 270 25% 60%;
+  --timeline-done: 34 45% 50%;
+
+  --success: 160 50% 48%;
+  --error: 345 64% 55%;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+  --shadow: 0 2px 4px 0 rgb(0 0 0 / 0.25);
+  --shadow-lg: 0 4px 8px 0 rgb(0 0 0 / 0.3);
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    min-height: 100vh;
+    margin: 0;
+    background-color: hsl(var(--canvas));
+    color: hsl(var(--body-strong));
+    font-family: var(--font-sans);
+    font-feature-settings: "liga" 1, "calt" 1;
+    text-rendering: optimizeLegibility;
+    line-height: 1.5;
+    font-size: 16px;
+    font-weight: 400;
+    letter-spacing: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer base {
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  input, textarea, select {
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  input:focus-visible, textarea:focus-visible, select:focus-visible {
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.15);
+    outline: none;
+  }
+
+  input:disabled,
+  textarea:disabled,
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  input[aria-invalid="true"] {
+    border-color: hsl(var(--destructive)) !important;
+    box-shadow: 0 0 0 1px hsl(var(--destructive));
+  }
+
+  body,
+  .card,
+  [class*="bg-"] {
+    transition-property: background-color, border-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: ease;
+  }
+
+  button,
+  a {
+    transition-property: background-color, border-color, color, opacity, transform, box-shadow;
+    transition-duration: 120ms;
+  }
+
+  button:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .card-hover {
+    transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  }
+  .card-hover:hover {
+    border-color: hsl(var(--hairline-strong));
+    box-shadow: var(--shadow);
+  }
+}
+
+.safe-area-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
