@@ -5,6 +5,17 @@ import { Input } from "@/components/ui/input"
 import { X, Plus, ChevronUp, ChevronDown } from "lucide-react"
 import { GOAL_COLORS } from "./types"
 import type { Goal, Phase } from "@/lib/types"
+// local fallback for generateId to avoid depending on external module
+function generateId(): string {
+  // prefer crypto.randomUUID when available
+  try {
+    const c = (globalThis as any).crypto
+    if (c && typeof c.randomUUID === "function") return c.randomUUID()
+  } catch (e) {
+    // ignore
+  }
+  return Math.random().toString(36).slice(2, 10)
+}
 
 export default function RoadmapBuilder({
   goal,
@@ -26,7 +37,7 @@ export default function RoadmapBuilder({
       setError("This phase already exists")
       return
     }
-    onChange([...phases, { id: crypto.randomUUID(), name, done: false }])
+    onChange([...phases, { id: generateId(), name, done: false }])
     setInput("")
     setError("")
   }

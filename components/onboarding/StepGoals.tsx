@@ -8,8 +8,10 @@ import type { Goal } from "@/lib/types"
 import GoalRow from "./GoalRow"
 import { EMPTY_DRAFT, normaliseTag, type DraftGoal } from "./types"
 
+const generateId = () => crypto.randomUUID()
+
 export default function StepGoals({ onNext }: { onNext: (goals: Goal[]) => void }) {
-  const [drafts, setDrafts] = useState<DraftGoal[]>([{ id: crypto.randomUUID(), ...EMPTY_DRAFT }])
+  const [drafts, setDrafts] = useState<DraftGoal[]>([{ id: generateId(), ...EMPTY_DRAFT }])
   const [existingGoals, setExistingGoals] = useState<Goal[]>([])
   const [duplicateError, setDuplicateError] = useState("")
 
@@ -18,7 +20,7 @@ export default function StepGoals({ onNext }: { onNext: (goals: Goal[]) => void 
   }, [])
 
   function addRow() {
-    setDrafts(d => [...d, { id: crypto.randomUUID(), ...EMPTY_DRAFT }])
+    setDrafts(d => [...d, { id: generateId(), ...EMPTY_DRAFT }])
   }
 
   function updateRow(id: string, patch: Partial<DraftGoal>) {
@@ -48,7 +50,7 @@ export default function StepGoals({ onNext }: { onNext: (goals: Goal[]) => void 
       }
 
       valid.push({
-        id: crypto.randomUUID(),
+        id: generateId(),
         name,
         description: "",
         category: "",
