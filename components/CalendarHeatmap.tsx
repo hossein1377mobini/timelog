@@ -1,75 +1,79 @@
-"use client"
+"use client";
 
-import React, { useEffect, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import React, { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface HeatmapDay {
-  date: string
-  seconds: number
+  date: string;
+  seconds: number;
 }
 
-const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+function computeDays(): HeatmapDay[] {
+  if (typeof window === "undefined") return [];
+  const sessions = JSON.parse(localStorage.getItem("compass_sessions") || "[]");
+
+  const map: Record<string, number> = {};
+  sessions.forEach((s: { startedAt: number; duration: number }) => {
+    const day = new Date(s.startedAt).toISOString().split("T")[0];
+    map[day] = (map[day] || 0) + s.duration;
+  });
+
+  const result: HeatmapDay[] = [];
+  for (let i = 179; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().split("T")[0];
+    result.push({ date: key, seconds: map[key] || 0 });
+  }
+  return result;
+}
+
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 export default function CalendarHeatmap() {
-  const [days, setDays] = useState<HeatmapDay[]>([])
+  const [days, setDays] = useState<HeatmapDay[]>([]);
 
   useEffect(() => {
-    loadData()
-    window.addEventListener("storage", loadData)
-    return () => window.removeEventListener("storage", loadData)
-  }, [])
-
-  function loadData() {
-    const sessions = JSON.parse(
-      localStorage.getItem("compass_sessions") || "[]"
-    )
-
-    const map: Record<string, number> = {}
-
-    sessions.forEach((s: { startedAt: number; duration: number }) => {
-      const day = new Date(s.startedAt)
-        .toISOString()
-        .split("T")[0]
-
-      map[day] = (map[day] || 0) + s.duration
-    })
-
-    const result: HeatmapDay[] = []
-
-    for (let i = 179; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-
-      const key = d.toISOString().split("T")[0]
-
-      result.push({
-        date: key,
-        seconds: map[key] || 0,
-      })
+    function onStorage() {
+      setDays(computeDays());
     }
-
-    setDays(result)
-  }
+    window.addEventListener("storage", onStorage);
+    onStorage(); // initial load after mount
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   function level(seconds: number) {
-    const hours = seconds / 3600
+    const hours = seconds / 3600;
 
-    if (hours === 0) return "bg-[hsl(var(--surface-strong))]"
-    if (hours < 1) return "bg-[hsl(var(--timeline-read))]"
-    if (hours < 2) return "bg-[hsl(var(--timeline-grep))]"
-    if (hours < 4) return "bg-[hsl(var(--primary))]/60"
-    return "bg-[hsl(var(--primary))]"
+    if (hours === 0) return "bg-[hsl(var(--surface-strong))]";
+    if (hours < 1) return "bg-[hsl(var(--timeline-read))]";
+    if (hours < 2) return "bg-[hsl(var(--timeline-grep))]";
+    if (hours < 4) return "bg-[hsl(var(--primary))]/60";
+    return "bg-[hsl(var(--primary))]";
   }
 
-  const monthLabels: { label: string; index: number }[] = []
-  let lastMonth = -1
+  const monthLabels: { label: string; index: number }[] = [];
+  let lastMonth = -1;
   days.forEach((day, i) => {
-    const m = new Date(day.date).getMonth()
+    const m = new Date(day.date).getMonth();
     if (m !== lastMonth) {
-      monthLabels.push({ label: MONTHS[m], index: i })
-      lastMonth = m
+      monthLabels.push({ label: MONTHS[m], index: i });
+      lastMonth = m;
     }
-  })
+  });
 
   return (
     <Card className="">
@@ -84,7 +88,12 @@ export default function CalendarHeatmap() {
               <span
                 key={i}
                 className="text-[9px] text-[hsl(var(--muted))]"
-                style={{ marginLeft: i === 0 ? 0 : `${ml.index * 5 - (monthLabels[i-1]?.index || 0) * 5}px` }}
+                style={{
+                  marginLeft:
+                    i === 0
+                      ? 0
+                      : `${ml.index * 5 - (monthLabels[i - 1]?.index || 0) * 5}px`,
+                }}
               >
                 {ml.label}
               </span>
@@ -95,12 +104,12 @@ export default function CalendarHeatmap() {
               <div
                 key={day.date}
                 title={`${day.date} - ${(day.seconds / 3600).toFixed(1)}h`}
-                className={`w-3 h-3 rounded-[2px] transition-colors ${level(day.seconds)}`}
+                className={`w-3 h-3 rounded-xs transition-colors ${level(day.seconds)}`}
               />
             ))}
           </div>
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

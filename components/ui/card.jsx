@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 
-export function Card({ className, ...props }) {
+export function Card({ className = "", ...props }) {
   return (
     <div
       className={cn(
@@ -14,14 +14,14 @@ export function Card({ className, ...props }) {
   )
 }
 
-export function CardHeader({ className, ...props }) {
+export function CardHeader({ className = "", ...props }) {
   return <div className={cn("flex flex-col gap-1.5 p-6", className)} {...props} />
 }
 
-export function CardContent({ className, ...props }) {
+export function CardContent({ className = "", ...props }) {
   return <div className={cn("p-6 pt-0", className)} {...props} />
 }
 
-export function CardTitle({ className, ...props }) {
+export function CardTitle({ className = "", ...props }) {
   return <h2 className={cn("text-[18px] font-semibold leading-[1.4] tracking-[0]", className)} {...props} />
 }

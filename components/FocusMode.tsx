@@ -317,7 +317,7 @@ export default function FocusMode() {
               </label>
               <Textarea
                 value={interruptNote}
-                onChange={e => setInterruptNote(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInterruptNote(e.target.value)}
                 placeholder="e.g. Phone call from client, checked Twitter..."
                 className="resize-none h-20 text-[14px] focus:ring-1 focus:ring-[hsl(var(--ring))] transition-shadow"
                 autoFocus
