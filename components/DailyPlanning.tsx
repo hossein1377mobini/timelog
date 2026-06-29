@@ -38,20 +38,8 @@ import {
   dispatchStorageEvent,
 } from "@/lib/storage";
 import type { Goal, WeeklyObjective, Task, ChecklistItem } from "@/lib/types";
-import { todayKey, generateId } from "@/lib/types";
-
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const MOODS = ["😔", "😐", "🙂", "😊", "🤩"];
-
-const GOAL_COLORS: Record<string, string> = {
-  Purple: "bg-[#EEEDFE] text-[#3C3489] dark:bg-[#26215C] dark:text-[#CECBF6]",
-  Teal: "bg-[#E1F5EE] text-[#085041] dark:bg-[#04342C] dark:text-[#9FE1CB]",
-  Amber: "bg-[#FAEEDA] text-[#633806] dark:bg-[#412402] dark:text-[#FAC775]",
-  Gray: "bg-[#F1EFE8] text-[#444441] dark:bg-[#2C2C2A] dark:text-[#D3D1C7]",
-  Blue: "bg-[#E6F1FB] text-[#0C447C] dark:bg-[#042C53] dark:text-[#B5D4F4]",
-  Coral: "bg-[#FAECE7] text-[#712B13] dark:bg-[#4A1B0C] dark:text-[#F5C4B3]",
-};
+import { todayKey, generateId } from "@/lib/utils";
+import { MOODS, GOAL_COLOR_MAP } from "@/lib/constants";
 
 // ── Bootstrap helper ─────────────────────────────────────────────────────────
 
@@ -505,8 +493,8 @@ export default function DailyPlanning() {
                               <div className="flex items-center gap-1.5">
                                 <span
                                   className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${
-                                    GOAL_COLORS[goal.color] ??
-                                    GOAL_COLORS.Purple
+                                    GOAL_COLOR_MAP[goal.color] ??
+                                    GOAL_COLOR_MAP.Purple
                                   }`}
                                 >
                                   {goal.tag}
@@ -755,8 +743,8 @@ export default function DailyPlanning() {
                                   {goalInfo && (
                                     <span
                                       className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
-                                        GOAL_COLORS[goalInfo.goal.color] ??
-                                        GOAL_COLORS.Purple
+                                        GOAL_COLOR_MAP[goalInfo.goal.color] ??
+                                        GOAL_COLOR_MAP.Purple
                                       }`}
                                     >
                                       {goalInfo.goal.tag}

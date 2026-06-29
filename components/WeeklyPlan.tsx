@@ -38,49 +38,12 @@ import {
   dispatchStorageEvent,
 } from "@/lib/storage";
 import type { Goal, WeeklyObjective, Session, TaskStatus } from "@/lib/types";
-import { weekStartKey, weekEndKey, weekLabel, todayKey } from "@/lib/types";
+import { weekStartKey, weekEndKey, weekLabel, todayKey } from "@/lib/utils";
 
-// ── Colour palette ─────────────────────────────────────────────────────────
+import { GOAL_COLOR_RECORD } from "@/lib/constants"
 
-const GOAL_COLORS: Record<string, { bar: string; cat: string; badge: string }> =
-  {
-    Purple: {
-      bar: "#534AB7",
-      cat: "bg-[#EEEDFE] text-[#3C3489] dark:bg-[#26215C] dark:text-[#CECBF6]",
-      badge:
-        "bg-[#EEEDFE] text-[#534AB7] dark:bg-[#26215C] dark:text-[#CECBF6]",
-    },
-    Teal: {
-      bar: "#0F6E56",
-      cat: "bg-[#E1F5EE] text-[#085041] dark:bg-[#04342C] dark:text-[#9FE1CB]",
-      badge:
-        "bg-[#E1F5EE] text-[#0F6E56] dark:bg-[#04342C] dark:text-[#9FE1CB]",
-    },
-    Amber: {
-      bar: "#854F0B",
-      cat: "bg-[#FAEEDA] text-[#633806] dark:bg-[#412402] dark:text-[#FAC775]",
-      badge:
-        "bg-[#FAEEDA] text-[#854F0B] dark:bg-[#412402] dark:text-[#FAC775]",
-    },
-    Gray: {
-      bar: "#5F5E5A",
-      cat: "bg-[#F1EFE8] text-[#444441] dark:bg-[#2C2C2A] dark:text-[#D3D1C7]",
-      badge:
-        "bg-[#F1EFE8] text-[#5F5E5A] dark:bg-[#2C2C2A] dark:text-[#D3D1C7]",
-    },
-    Blue: {
-      bar: "#185FA5",
-      cat: "bg-[#E6F1FB] text-[#0C447C] dark:bg-[#042C53] dark:text-[#B5D4F4]",
-      badge:
-        "bg-[#E6F1FB] text-[#185FA5] dark:bg-[#042C53] dark:text-[#B5D4F4]",
-    },
-    Coral: {
-      bar: "#993C1D",
-      cat: "bg-[#FAECE7] text-[#712B13] dark:bg-[#4A1B0C] dark:text-[#F5C4B3]",
-      badge:
-        "bg-[#FAECE7] text-[#993C1D] dark:bg-[#4A1B0C] dark:text-[#F5C4B3]",
-    },
-  };
+// Alias for backward-compat with this file's existing usage pattern
+const GOAL_COLORS = GOAL_COLOR_RECORD
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

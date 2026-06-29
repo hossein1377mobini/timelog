@@ -1,69 +1,37 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getSessions } from "@/lib/storage";
+import type { Session } from "@/lib/types";
+import { formatHM } from "@/lib/utils";
+import { currentStreak, sessionsOnDate, sessionsThisWeek, totalDuration } from "@/lib/analytics";
 
-function safeParseSessions(raw) {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function formatHM(seconds) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h === 0) return `${m}m`;
-  return `${h}h ${m}m`;
-}
-
-function getStreak(sessions) {
-  if (!sessions.length) return 0;
-  const days = [
-    ...new Set(sessions.map((s) => new Date(s.startedAt).toDateString())),
-  ]
-    .map((d) => new Date(d))
-    .sort((a, b) => b - a);
-
-  let streak = 1;
-  for (let i = 1; i < days.length; i++) {
-    const diff = (days[i - 1] - days[i]) / (1000 * 60 * 60 * 24);
-    if (diff === 1) streak++;
-    else break;
-  }
-  return streak;
-}
-
-function readSessions() {
-  if (typeof window === "undefined") return [];
-  return safeParseSessions(localStorage.getItem("compass_sessions"));
+interface Metric {
+  label: string;
+  value: string;
+  sub: string;
+  green?: boolean;
 }
 
 export default function MetricsBar() {
-  const [sessions, setSessions] = useState([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
 
   useEffect(() => {
     function onStorage() {
-      setSessions(readSessions());
+      setSessions(getSessions());
     }
     window.addEventListener("storage", onStorage);
-    onStorage(); // initial load after mount
+    onStorage();
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const now = new Date();
-  const todaySessions = sessions.filter(
-    (s) => new Date(s.startedAt).toDateString() === now.toDateString(),
-  );
+  const todaySessions = sessionsOnDate(sessions, now);
 
   const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay());
+  weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7)); // Monday
   weekStart.setHours(0, 0, 0, 0);
-  const weekSessions = sessions.filter(
-    (s) => new Date(s.startedAt) >= weekStart,
-  );
+  const weekSessions = sessionsThisWeek(sessions);
 
   const prevWeekStart = new Date(weekStart);
   prevWeekStart.setDate(prevWeekStart.getDate() - 7);
@@ -72,21 +40,18 @@ export default function MetricsBar() {
     return d >= prevWeekStart && d < weekStart;
   });
 
-  const todaySeconds = todaySessions.reduce((sum, x) => sum + x.duration, 0);
-  const weekSeconds = weekSessions.reduce((sum, x) => sum + x.duration, 0);
-  const prevWeekSeconds = prevWeekSessions.reduce(
-    (sum, x) => sum + x.duration,
-    0,
-  );
+  const todaySeconds = totalDuration(todaySessions);
+  const weekSeconds = totalDuration(weekSessions);
+  const prevWeekSeconds = totalDuration(prevWeekSessions);
   const weekChange = prevWeekSeconds
     ? Math.round(((weekSeconds - prevWeekSeconds) / prevWeekSeconds) * 100)
     : null;
   const avgSession = weekSessions.length
     ? Math.round(weekSeconds / weekSessions.length / 60)
     : 0;
-  const streak = getStreak(sessions);
+  const streak = currentStreak(sessions);
 
-  const metrics = [
+  const metrics: Metric[] = [
     {
       label: "Today",
       value: todaySeconds ? formatHM(todaySeconds) : "0m",

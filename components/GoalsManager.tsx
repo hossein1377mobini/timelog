@@ -13,54 +13,10 @@ import {
 } from "@/components/ui/dialog"
 import { Target, Plus, Edit2, Trash2, ChevronDown, ChevronUp, Check, X, Map } from "lucide-react"
 import { differenceInDays } from "date-fns"
-
-// ── types ─────────────────────────────────────────────────────────────────────
-interface Goal {
-  id: number
-  name: string
-  tag: string
-  targetHours: number
-  deadline: string
-  weeklyTarget: number
-  color: string
-  createdAt: number
-}
-
-interface Session {
-  id: number
-  taskName: string
-  tags: string[]
-  duration: number
-  startedAt: number
-}
-
-export interface Phase {
-  id: number
-  name: string
-  done: boolean
-}
-
-type RoadmapMap = Record<string, Phase[]>
-
-// ── constants ─────────────────────────────────────────────────────────────────
-const GOAL_COLORS = [
-  { name: "Purple", bar: "#534AB7", cat: "bg-[#EEEDFE] text-[#3C3489] dark:bg-[#26215C] dark:text-[#CECBF6]" },
-  { name: "Teal",   bar: "#0F6E56", cat: "bg-[#E1F5EE] text-[#085041] dark:bg-[#04342C] dark:text-[#9FE1CB]" },
-  { name: "Amber",  bar: "#854F0B", cat: "bg-[#FAEEDA] text-[#633806] dark:bg-[#412402] dark:text-[#FAC775]" },
-  { name: "Gray",   bar: "#5F5E5A", cat: "bg-[#F1EFE8] text-[#444441] dark:bg-[#2C2C2A] dark:text-[#D3D1C7]" },
-  { name: "Blue",   bar: "#185FA5", cat: "bg-[#E6F1FB] text-[#0C447C] dark:bg-[#042C53] dark:text-[#B5D4F4]" },
-  { name: "Coral",  bar: "#993C1D", cat: "bg-[#FAECE7] text-[#712B13] dark:bg-[#4A1B0C] dark:text-[#F5C4B3]" },
-]
-
-const EMPTY_FORM = {
-  name: "",
-  tag: "",
-  targetHours: 100,
-  deadline: "",
-  weeklyTarget: 10,
-  color: GOAL_COLORS[0].name,
-}
-type FormState = typeof EMPTY_FORM
+import type { Goal, Session, Phase } from "@/lib/types"
+import { generateId } from "@/lib/utils"
+import { getGoals, setGoals, getSessions, dispatchStorageEvent, saveRoadmapForGoal, getRoadmapForGoal } from "@/lib/storage"
+import { GOAL_COLORS, EMPTY_GOAL_FORM } from "@/lib/constants"
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function getLoggedHours(tag: string, sessions: Session[]): number {
@@ -71,8 +27,8 @@ function getLoggedHours(tag: string, sessions: Session[]): number {
 }
 
 function getStatus(goal: Goal, logged: number) {
-  if (!goal.deadline) return { label: "active", style: "bg-[hsl(var(--surface-strong))] text-[hsl(var(--muted))]" }
-  const daysLeft = differenceInDays(new Date(goal.deadline), new Date())
+  if (!goal.targetDate) return { label: "active", style: "bg-[hsl(var(--surface-strong))] text-[hsl(var(--muted))]" }
+  const daysLeft = differenceInDays(new Date(goal.targetDate), new Date())
   const remaining = goal.targetHours - logged
   const weeksLeft = daysLeft / 7
   const neededPerWeek = weeksLeft > 0 ? remaining / weeksLeft : Infinity
@@ -84,20 +40,22 @@ function getStatus(goal: Goal, logged: number) {
 }
 
 function getNeededPerWeek(goal: Goal, logged: number): number {
-  if (!goal.deadline) return goal.weeklyTarget
-  const daysLeft = differenceInDays(new Date(goal.deadline), new Date())
+  if (!goal.targetDate) return goal.weeklyTarget
+  const daysLeft = differenceInDays(new Date(goal.targetDate), new Date())
   const weeksLeft = daysLeft / 7
   const remaining = Math.max(0, goal.targetHours - logged)
   if (weeksLeft <= 0) return remaining
   return Math.round((remaining / weeksLeft) * 10) / 10
 }
 
+type FormState = typeof EMPTY_GOAL_FORM
+
 // ── RoadmapStepper ────────────────────────────────────────────────────────────
 function RoadmapStepper({
   goalId,
   color,
 }: {
-  goalId: number
+  goalId: string
   color: { bar: string }
 }) {
   const [phases, setPhases] = useState<Phase[]>([])
@@ -109,28 +67,22 @@ function RoadmapStepper({
   }, [goalId])
 
   function loadPhases() {
-    const map: RoadmapMap = JSON.parse(localStorage.getItem("compass_roadmaps") || "{}")
-    setPhases(map[String(goalId)] || [])
+    const loaded = getRoadmapForGoal(goalId)
+    setPhases(loaded)
   }
 
   function savePhases(updated: Phase[]) {
-    const map: RoadmapMap = JSON.parse(localStorage.getItem("compass_roadmaps") || "{}")
-    map[String(goalId)] = updated
-    localStorage.setItem("compass_roadmaps", JSON.stringify(map))
+    saveRoadmapForGoal(goalId, updated)
     setPhases(updated)
   }
 
-  function toggleDone(id: number) {
-    // Mark everything up to and including this phase as done,
-    // or unmark if it was already the last done phase
+  function toggleDone(id: string) {
     const idx = phases.findIndex(p => p.id === id)
     if (idx < 0) return
     const currentDoneUpTo = phases.reduce((last, p, i) => p.done ? i : last, -1)
     if (idx === currentDoneUpTo) {
-      // clicking the last done phase → unmark it
       savePhases(phases.map((p, i) => ({ ...p, done: i < idx })))
     } else {
-      // mark all up to idx as done
       savePhases(phases.map((p, i) => ({ ...p, done: i <= idx })))
     }
   }
@@ -138,16 +90,15 @@ function RoadmapStepper({
   function addPhase() {
     const name = input.trim()
     if (!name) return
-    savePhases([...phases, { id: Date.now(), name, done: false }])
+    savePhases([...phases, { id: generateId(), name, done: false }])
     setInput("")
     setAdding(false)
   }
 
-  function removePhase(id: number) {
+  function removePhase(id: string) {
     savePhases(phases.filter(p => p.id !== id))
   }
 
-  // current phase = first not done
   const currentIdx = phases.findIndex(p => !p.done)
 
   if (phases.length === 0 && !adding) {
@@ -168,17 +119,14 @@ function RoadmapStepper({
     <div className="pt-3 border-t border-[hsl(var(--hairline))] mt-3 space-y-2.5">
       <p className="text-[10px] uppercase tracking-[0.08em] text-[hsl(var(--muted))] font-medium">Roadmap</p>
 
-      {/* Horizontal stepper */}
       {phases.length > 0 && (
         <div className="flex items-center gap-0 overflow-x-auto pb-1 -mx-0.5 px-0.5">
           {phases.map((phase, i) => {
             const isDone = phase.done
             const isCurrent = i === currentIdx
-            const isUpcoming = !isDone && !isCurrent
 
             return (
               <React.Fragment key={phase.id}>
-                {/* connector line */}
                 {i > 0 && (
                   <div
                     className="h-px w-4 shrink-0 transition-colors"
@@ -186,7 +134,6 @@ function RoadmapStepper({
                   />
                 )}
 
-                {/* phase node */}
                 <div className="flex flex-col items-center gap-1 shrink-0 group/phase">
                   <button
                     onClick={() => toggleDone(phase.id)}
@@ -234,7 +181,6 @@ function RoadmapStepper({
                     )}
                   </div>
 
-                  {/* remove on hover */}
                   <button
                     onClick={() => removePhase(phase.id)}
                     className="opacity-0 group-hover/phase:opacity-100 w-3.5 h-3.5 flex items-center justify-center rounded-full text-[hsl(var(--muted))] hover:text-[hsl(var(--error))] transition-all"
@@ -249,7 +195,6 @@ function RoadmapStepper({
         </div>
       )}
 
-      {/* Add phase */}
       {adding ? (
         <div className="flex gap-2">
           <Input
@@ -307,15 +252,14 @@ function GoalCard({
   const logged = getLoggedHours(goal.tag, sessions)
   const pct = Math.min(100, Math.round((logged / goal.targetHours) * 100))
   const remaining = Math.max(0, Math.round((goal.targetHours - logged) * 10) / 10)
-  const daysLeft = goal.deadline ? differenceInDays(new Date(goal.deadline), new Date()) : null
+  const daysLeft = goal.targetDate ? differenceInDays(new Date(goal.targetDate), new Date()) : null
   const neededPerWeek = getNeededPerWeek(goal, logged)
   const status = getStatus(goal, logged)
 
-  // peek at phase count for the toggle label
   const [phaseCount, setPhaseCount] = useState(0)
   useEffect(() => {
-    const map: RoadmapMap = JSON.parse(localStorage.getItem("compass_roadmaps") || "{}")
-    setPhaseCount((map[String(goal.id)] || []).length)
+    const loaded = getRoadmapForGoal(goal.id)
+    setPhaseCount(loaded.length)
   }, [goal.id, expanded])
 
   return (
@@ -330,7 +274,7 @@ function GoalCard({
           </div>
           <p className="text-[11px] text-[hsl(var(--muted))]">
             {goal.targetHours}h target
-            {goal.deadline && ` · due ${new Date(goal.deadline).toLocaleDateString(undefined, { month: "short", year: "numeric" })}`}
+            {goal.targetDate && ` · due ${new Date(goal.targetDate).toLocaleDateString(undefined, { month: "short", year: "numeric" })}`}
           </p>
         </div>
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2">
@@ -364,17 +308,17 @@ function GoalCard({
 
       {/* Stats */}
       <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {[
+        {([
           { label: "logged", value: `${logged}h` },
           { label: "remaining", value: `${remaining}h` },
           { label: "needed/wk", value: `${neededPerWeek}h` },
           daysLeft !== null
             ? { label: "days left", value: daysLeft > 0 ? `${daysLeft}` : "overdue" }
             : null,
-        ].filter(Boolean).map(stat => (
-          <span key={stat!.label} className="text-[11px] text-[hsl(var(--muted))]">
-            <span className="font-medium text-[hsl(var(--body-strong))]">{stat!.value}</span>
-            {" "}{stat!.label}
+        ].filter(Boolean) as { label: string; value: string }[]).map(stat => (
+          <span key={stat.label} className="text-[11px] text-[hsl(var(--muted))]">
+            <span className="font-medium text-[hsl(var(--body-strong))]">{stat.value}</span>
+            {" "}{stat.label}
           </span>
         ))}
       </div>
@@ -398,13 +342,13 @@ function GoalCard({
 
 // ── main GoalsManager ─────────────────────────────────────────────────────────
 export default function GoalsManager() {
-  const [goals, setGoals] = useState<Goal[]>([])
-  const [sessions, setSessions] = useState<Session[]>([])
+  const [goals, setGoalsState] = useState<Goal[]>([])
+  const [sessions, setSessionsState] = useState<Session[]>([])
   const [open, setOpen] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState<FormState>(EMPTY_GOAL_FORM)
   const [errors, setErrors] = useState<Partial<FormState>>({})
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
   useEffect(() => {
     loadGoals()
@@ -414,22 +358,30 @@ export default function GoalsManager() {
   }, [])
 
   function loadGoals() {
-    setGoals(JSON.parse(localStorage.getItem("compass_goals") || "[]"))
+    setGoalsState(getGoals())
   }
   function loadSessions() {
-    setSessions(JSON.parse(localStorage.getItem("compass_sessions") || "[]"))
+    setSessionsState(getSessions())
   }
-  function saveGoals(updated: Goal[]) {
-    localStorage.setItem("compass_goals", JSON.stringify(updated))
+
+  function saveGoalsLocal(updated: Goal[]) {
     setGoals(updated)
+    setGoalsState(updated)
   }
 
   function openAdd() {
-    setEditingId(null); setForm(EMPTY_FORM); setErrors({}); setOpen(true)
+    setEditingId(null); setForm(EMPTY_GOAL_FORM); setErrors({}); setOpen(true)
   }
   function openEdit(goal: Goal) {
     setEditingId(goal.id)
-    setForm({ name: goal.name, tag: goal.tag, targetHours: goal.targetHours, deadline: goal.deadline, weeklyTarget: goal.weeklyTarget, color: goal.color })
+    setForm({
+      name: goal.name,
+      tag: goal.tag,
+      targetHours: goal.targetHours,
+      deadline: goal.targetDate || "",
+      weeklyTarget: goal.weeklyTarget,
+      color: goal.color,
+    })
     setErrors({}); setOpen(true)
   }
 
@@ -445,32 +397,46 @@ export default function GoalsManager() {
 
   function handleSave() {
     if (!validate()) return
+    const tag = form.tag.trim().startsWith("#") ? form.tag.trim() : `#${form.tag.trim()}`
     if (editingId !== null) {
-      saveGoals(goals.map(g => g.id === editingId
-        ? { ...g, ...form, tag: form.tag.startsWith("#") ? form.tag : `#${form.tag}` }
+      saveGoalsLocal(goals.map(g => g.id === editingId
+        ? {
+            ...g,
+            name: form.name.trim(),
+            tag,
+            targetHours: Number(form.targetHours),
+            targetDate: form.deadline,
+            weeklyTarget: Number(form.weeklyTarget),
+            color: form.color,
+            updatedAt: new Date().toISOString(),
+          }
         : g
       ))
     } else {
-      saveGoals([...goals, {
-        id: Date.now(),
+      const now = new Date().toISOString()
+      saveGoalsLocal([...goals, {
+        id: generateId(),
         name: form.name.trim(),
-        tag: form.tag.trim().startsWith("#") ? form.tag.trim() : `#${form.tag.trim()}`,
+        description: "",
+        category: "",
+        tag,
         targetHours: Number(form.targetHours),
-        deadline: form.deadline,
+        targetDate: form.deadline,
         weeklyTarget: Number(form.weeklyTarget),
+        priority: "medium",
+        status: "active",
         color: form.color,
-        createdAt: Date.now(),
+        roadmap: [],
+        createdAt: now,
+        updatedAt: now,
       }])
     }
     setOpen(false)
   }
 
-  function handleDelete(id: number) {
-    saveGoals(goals.filter(g => g.id !== id))
-    // clean up roadmap too
-    const map: RoadmapMap = JSON.parse(localStorage.getItem("compass_roadmaps") || "{}")
-    delete map[String(id)]
-    localStorage.setItem("compass_roadmaps", JSON.stringify(map))
+  function handleDelete(id: string) {
+    saveGoalsLocal(goals.filter(g => g.id !== id))
+    dispatchStorageEvent()
     setDeleteConfirm(null)
   }
 
@@ -614,7 +580,7 @@ export default function GoalsManager() {
             <DialogTitle className="text-[16px] font-semibold">Delete goal?</DialogTitle>
           </DialogHeader>
           <p className="text-[14px] text-[hsl(var(--muted))] py-1">
-            This will remove the goal, its roadmap, and progress tracking. Your session history won&apos;t be affected.
+            This will remove the goal, its roadmap, and progress tracking. Your session history won't be affected.
           </p>
           <DialogFooter className="gap-2">
             <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(null)}>Cancel</Button>

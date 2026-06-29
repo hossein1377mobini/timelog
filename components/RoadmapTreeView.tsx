@@ -75,14 +75,9 @@ const TYPE_LABELS: Record<NodeType, string> = {
   task: "Task",
 };
 
-const GOAL_COLORS: Record<string, string> = {
-  Purple: "#534AB7",
-  Teal: "#0F6E56",
-  Amber: "#854F0B",
-  Gray: "#5F5E5A",
-  Blue: "#185FA5",
-  Coral: "#993C1D",
-};
+import { GOAL_BAR_MAP } from "@/lib/constants"
+
+const GOAL_COLORS = GOAL_BAR_MAP
 
 interface TreeNodeProps {
   nodeId: string;

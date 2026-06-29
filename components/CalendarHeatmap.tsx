@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getSessions } from "@/lib/storage";
 
 interface HeatmapDay {
   date: string;
@@ -9,11 +10,10 @@ interface HeatmapDay {
 }
 
 function computeDays(): HeatmapDay[] {
-  if (typeof window === "undefined") return [];
-  const sessions = JSON.parse(localStorage.getItem("compass_sessions") || "[]");
+  const sessions = getSessions();
 
   const map: Record<string, number> = {};
-  sessions.forEach((s: { startedAt: number; duration: number }) => {
+  sessions.forEach((s) => {
     const day = new Date(s.startedAt).toISOString().split("T")[0];
     map[day] = (map[day] || 0) + s.duration;
   });

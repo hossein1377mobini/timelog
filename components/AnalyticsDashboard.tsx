@@ -24,6 +24,7 @@ import {
   eachDayOfInterval,
   subDays,
 } from "date-fns";
+import { formatHM } from "@/lib/utils";
 
 interface Session {
   id: number;
@@ -103,12 +104,6 @@ const MONTHS = [
 ];
 
 type Section = "charts" | "insights" | "goals" | "comparisons";
-
-function formatHM(secs: number) {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  return `${h}h ${m}m`;
-}
 
 function getHours(secs: number) {
   return Math.round((secs / 3600) * 10) / 10;

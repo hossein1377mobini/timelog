@@ -10,100 +10,12 @@ import {
   ChevronUp,
   Flame,
 } from "lucide-react";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Session {
-  id: string;
-  startedAt: string;
-  duration: number;
-  date: string;
-  taskName: string;
-  tags: string[];
-}
+import { getSessions } from "@/lib/storage";
+import type { Session } from "@/lib/types";
+import { formatHM } from "@/lib/utils";
+import { currentStreak, bestStreak, dailyDurationMap, toYMD, todayKey } from "@/lib/analytics";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function toYMD(d: Date): string {
-  return d.toISOString().split("T")[0];
-}
-
-function today(): string {
-  return toYMD(new Date());
-}
-
-function loadSessions(): Session[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(
-      localStorage.getItem("compass_sessions") || "[]",
-    ) as Session[];
-  } catch {
-    return [];
-  }
-}
-
-/** Returns a map of date string → total duration (seconds) for dates that have > 0 duration. */
-function buildActiveDays(sessions: Session[]): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const s of sessions) {
-    if (!s.duration || s.duration <= 0) continue;
-    // Prefer explicit `date` field; fall back to parsing `startedAt`
-    const dateKey =
-      s.date && /^\d{4}-\d{2}-\d{2}$/.test(s.date)
-        ? s.date
-        : toYMD(new Date(s.startedAt));
-    map.set(dateKey, (map.get(dateKey) ?? 0) + s.duration);
-  }
-  return map;
-}
-
-function calcCurrentStreak(activeDays: Map<string, number>): number {
-  const td = today();
-  const todayHasSessions = activeDays.has(td);
-
-  // If today has no sessions, start from yesterday
-  const cursor = new Date();
-  if (!todayHasSessions) {
-    cursor.setDate(cursor.getDate() - 1);
-  }
-
-  let streak = 0;
-  while (true) {
-    const key = toYMD(cursor);
-    if (!activeDays.has(key)) break;
-    streak++;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  return streak;
-}
-
-function calcBestStreak(activeDays: Map<string, number>): number {
-  if (activeDays.size === 0) return 0;
-
-  const sorted = Array.from(activeDays.keys()).sort();
-  let best = 1;
-  let current = 1;
-
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = new Date(sorted[i - 1]);
-    const curr = new Date(sorted[i]);
-    const diff = (curr.getTime() - prev.getTime()) / 86_400_000;
-    if (diff === 1) {
-      current++;
-      if (current > best) best = current;
-    } else {
-      current = 1;
-    }
-  }
-  return best;
-}
-
-function formatHM(secs: number): string {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  return `${h}h ${m}m`;
-}
 
 function motivationalMessage(streak: number): string {
   if (streak === 0) return "Every expert was once a beginner. Start today! 💪";
@@ -133,7 +45,7 @@ const MONTH_NAMES = [
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function HabitTracker() {
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessions, setSessions] = useState<Session[]>(() => getSessions());
   const [viewYear, setViewYear] = useState<number>(() =>
     new Date().getFullYear(),
   );
@@ -145,7 +57,7 @@ export default function HabitTracker() {
   // Re-read sessions on cross-tab storage changes
   useEffect(() => {
     function onStorage() {
-      setSessions(loadSessions());
+      setSessions(getSessions());
     }
     window.addEventListener("storage", onStorage);
     onStorage(); // initial load after mount
@@ -154,10 +66,10 @@ export default function HabitTracker() {
 
   // ── Derived data ────────────────────────────────────────────────────────────
 
-  const activeDays = buildActiveDays(sessions);
-  const currentStreak = calcCurrentStreak(activeDays);
-  const bestStreak = calcBestStreak(activeDays);
-  const todayStr = today();
+  const activeDays = dailyDurationMap(sessions);
+  const curStreak = currentStreak(sessions);
+  const bstStreak = bestStreak(sessions);
+  const todayStr = todayKey();
 
   // Month navigation
   function prevMonth() {
@@ -202,7 +114,7 @@ export default function HabitTracker() {
     });
   }
   for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`; // same format as toYMD
     const isFuture = dateStr > todayStr;
     cells.push({
       day: d,
@@ -252,7 +164,7 @@ export default function HabitTracker() {
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart);
     d.setDate(weekStart.getDate() + i);
-    const key = toYMD(d);
+    const key = toYMD(d); // eslint-disable-line @typescript-eslint/no-unused-vars
     if (key > todayStr) break;
     if (activeDays.has(key)) thisWeekDays++;
   }
@@ -278,12 +190,12 @@ export default function HabitTracker() {
   const consistency30 = Math.round((activeLast30 / 30) * 100);
 
   // Average daily focus (only over days with sessions)
-  const totalDuration = Array.from(activeDays.values()).reduce(
+  const totalSecs = Array.from(activeDays.values()).reduce(
     (a, b) => a + b,
     0,
   );
   const avgDailyFocus =
-    activeDays.size > 0 ? totalDuration / activeDays.size : 0;
+    activeDays.size > 0 ? totalSecs / activeDays.size : 0;
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -401,7 +313,7 @@ export default function HabitTracker() {
           {[
             {
               icon: "🔥",
-              value: `${currentStreak} day${currentStreak !== 1 ? "s" : ""}`,
+              value: `${curStreak} day${curStreak !== 1 ? "s" : ""}`,
               label: "streak",
             },
             {
@@ -411,7 +323,7 @@ export default function HabitTracker() {
             },
             {
               icon: "🏆",
-              value: `${bestStreak} day${bestStreak !== 1 ? "s" : ""}`,
+              value: `${bstStreak} day${bstStreak !== 1 ? "s" : ""}`,
               label: "best",
             },
           ].map((stat) => (
@@ -432,7 +344,7 @@ export default function HabitTracker() {
 
         {/* ── Motivational message ── */}
         <p className="text-[12px] text-center text-[hsl(var(--muted))] leading-snug px-2">
-          {motivationalMessage(currentStreak)}
+          {motivationalMessage(curStreak)}
         </p>
 
         {/* ── Collapsible statistics breakdown ── */}
@@ -469,8 +381,8 @@ export default function HabitTracker() {
                   value: `${thisMonthDays}/${daysInCurrentMonth} days`,
                 },
                 { label: "Consistency (30 days)", value: `${consistency30}%` },
-                { label: "Current streak", value: `${currentStreak} days 🔥` },
-                { label: "Best streak", value: `${bestStreak} days 🏆` },
+                { label: "Current streak", value: `${curStreak} days 🔥` },
+                { label: "Best streak", value: `${bstStreak} days 🏆` },
                 {
                   label: "Average daily focus",
                   value: avgDailyFocus > 0 ? formatHM(avgDailyFocus) : "—",

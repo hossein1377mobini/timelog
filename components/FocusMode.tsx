@@ -31,11 +31,8 @@ interface Interruption {
   duration?: number
 }
 
-const POMODORO_PRESETS = [
-  { label: "25 / 5", work: 25, break: 5 },
-  { label: "50 / 10", work: 50, break: 10 },
-  { label: "90 / 20", work: 90, break: 20 },
-]
+import { POMODORO_PRESETS } from "@/lib/constants"
+import { getInterruptions, setInterruptions as persistInterruptions } from "@/lib/storage"
 
 const INTERRUPTION_TYPES: { value: InterruptionType; label: string; color: string }[] = [
   { value: "distraction", label: "Distraction", color: "bg-[hsl(var(--error))]/10 text-[hsl(var(--error))]" },
@@ -54,7 +51,7 @@ export default function FocusMode() {
   const [preset, setPreset] = useState(POMODORO_PRESETS[0])
   const [phase, setPhase] = useState<"idle" | "work" | "break">("idle")
   const [secondsLeft, setSecondsLeft] = useState(preset.work * 60)
-  const [interruptions, setInterruptions] = useState<Interruption[]>([])
+  const [interruptions, setInterruptionsState] = useState<Interruption[]>([])
   const [showInterrupt, setShowInterrupt] = useState(false)
   const [interruptType, setInterruptType] = useState<InterruptionType>("distraction")
   const [interruptNote, setInterruptNote] = useState("")
@@ -117,8 +114,8 @@ export default function FocusMode() {
       duration,
     }
     const updated = [entry, ...interruptions]
-    setInterruptions(updated)
-    localStorage.setItem("compass_interruptions", JSON.stringify(updated))
+    setInterruptionsState(updated)
+    persistInterruptions(updated as any)
     setInterruptNote("")
     setShowInterrupt(false)
     if (phase !== "idle") {

@@ -1,8 +1,20 @@
+/**
+ * localStorage persistence layer for the Compass time-tracking app.
+ *
+ * All public functions in this module are thin wrappers around
+ * `safeGet` / `safeSet` which handle JSON serialisation and
+ * server-side rendering guards.
+ *
+ * **Storage keys** are namespaced under the `compass_` prefix to
+ * avoid collisions with other libraries.
+ */
+
 import type {
   Goal, Session, Interruption, Reflection, WeeklyObjective, Task, Phase, RoadmapMap, RoadmapNode, RoadmapTree,
 } from "@/lib/types"
-import { generateId, weekStartKey } from "@/lib/types"
+import { generateId, weekStartKey } from "@/lib/utils"
 
+/** localStorage key constants – centralised for easy migration / cleanup. */
 const KEYS = {
   GOALS: "compass_goals",
   SESSIONS: "compass_sessions",
@@ -16,6 +28,7 @@ const KEYS = {
   ROADMAP_TREES: "compass_roadmap_trees",
 } as const
 
+/** Read and parse a JSON value from `localStorage`, returning `fallback` on any failure. */
 function safeGet<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback
   try {
@@ -27,6 +40,7 @@ function safeGet<T>(key: string, fallback: T): T {
   }
 }
 
+/** Serialize `value` as JSON and write it to `localStorage`. No-op during SSR. */
 function safeSet<T>(key: string, value: T): void {
   if (typeof window === "undefined") return
   try {
@@ -36,27 +50,37 @@ function safeSet<T>(key: string, value: T): void {
   }
 }
 
+/** Broadcast a synthetic `"storage"` event so other hooks re-read their state. */
 export function dispatchStorageEvent(): void {
   if (typeof window === "undefined") return
   window.dispatchEvent(new Event("storage"))
 }
 
+/**
+ * Subscribe to cross-tab / cross-component `"storage"` events.
+ *
+ * @param handler – callback invoked on every storage change
+ * @returns an unsubscribe function (call in `useEffect` cleanup)
+ */
 export function useStorageSync(handler: () => void): () => void {
   if (typeof window === "undefined") return () => {}
   window.addEventListener("storage", handler)
   return () => window.removeEventListener("storage", handler)
 }
 
-// ── Goals ──
+// ── Goals ──────────────────────────────────────────────────────────────────────
 
+/** Return all goals from storage. */
 export function getGoals(): Goal[] {
   return safeGet<Goal[]>(KEYS.GOALS, [])
 }
 
+/** Overwrite the entire goals list. */
 export function setGoals(goals: Goal[]): void {
   safeSet(KEYS.GOALS, goals)
 }
 
+/** Create a new goal, persist it, and return the full object. */
 export function addGoal(input: Omit<Goal, "id" | "roadmap" | "createdAt" | "updatedAt">): Goal {
   const now = new Date().toISOString()
   const goal: Goal = { ...input, id: generateId(), roadmap: [], createdAt: now, updatedAt: now }
@@ -66,6 +90,7 @@ export function addGoal(input: Omit<Goal, "id" | "roadmap" | "createdAt" | "upda
   return goal
 }
 
+/** Patch an existing goal by `id`. Returns the updated goal or `null` if not found. */
 export function updateGoal(id: string, patch: Partial<Goal>): Goal | null {
   const all = getGoals()
   const idx = all.findIndex((g) => g.id === id)
@@ -75,14 +100,16 @@ export function updateGoal(id: string, patch: Partial<Goal>): Goal | null {
   return all[idx]
 }
 
+/** Remove a goal and its associated roadmap data. */
 export function deleteGoal(id: string): void {
   const all = getGoals()
   setGoals(all.filter((g) => g.id !== id))
   deleteRoadmapForGoal(id)
 }
 
-// ── Sessions ──
+// ── Sessions ───────────────────────────────────────────────────────────────────
 
+/** Return all focus sessions from storage. */
 export function getSessions(): Session[] {
   return safeGet<Session[]>(KEYS.SESSIONS, [])
 }
@@ -91,6 +118,7 @@ export function setSessions(sessions: Session[]): void {
   safeSet(KEYS.SESSIONS, sessions)
 }
 
+/** Persist a new session and return it with its generated `id`. */
 export function addSession(input: Omit<Session, "id">): Session {
   const session: Session = { ...input, id: generateId() }
   const all = getSessions()
@@ -99,17 +127,20 @@ export function addSession(input: Omit<Session, "id">): Session {
   return session
 }
 
+/** Remove a single session by `id`. */
 export function deleteSession(id: string): void {
   const all = getSessions()
   setSessions(all.filter((s) => s.id !== id))
 }
 
+/** Remove all sessions (used by the data reset flow). */
 export function clearSessions(): void {
   setSessions([])
 }
 
-// ── Interruptions ──
+// ── Interruptions ──────────────────────────────────────────────────────────────
 
+/** Return all recorded interruptions. */
 export function getInterruptions(): Interruption[] {
   return safeGet<Interruption[]>(KEYS.INTERRUPTIONS, [])
 }
@@ -118,6 +149,7 @@ export function setInterruptions(interruptions: Interruption[]): void {
   safeSet(KEYS.INTERRUPTIONS, interruptions)
 }
 
+/** Persist a new interruption event. */
 export function addInterruption(input: Omit<Interruption, "id">): Interruption {
   const item: Interruption = { ...input, id: generateId() }
   const all = getInterruptions()
@@ -126,8 +158,9 @@ export function addInterruption(input: Omit<Interruption, "id">): Interruption {
   return item
 }
 
-// ── Reflections ──
+// ── Reflections ────────────────────────────────────────────────────────────────
 
+/** Return all daily reflections. */
 export function getReflections(): Reflection[] {
   return safeGet<Reflection[]>(KEYS.REFLECTIONS, [])
 }
@@ -136,10 +169,12 @@ export function setReflections(reflections: Reflection[]): void {
   safeSet(KEYS.REFLECTIONS, reflections)
 }
 
+/** Find the reflection entry for a specific date, if any. */
 export function getReflectionByDate(date: string): Reflection | undefined {
   return getReflections().find((r) => r.date === date)
 }
 
+/** Create or update a reflection for the given date (upsert). */
 export function saveReflection(input: Omit<Reflection, "id" | "createdAt">): Reflection {
   const existing = getReflectionByDate(input.date)
   const now = new Date().toISOString()
@@ -155,8 +190,9 @@ export function saveReflection(input: Omit<Reflection, "id" | "createdAt">): Ref
   return ref
 }
 
-// ── Weekly Objectives ──
+// ── Weekly Objectives ──────────────────────────────────────────────────────────
 
+/** Return all weekly objectives. */
 export function getWeeklyObjectives(): WeeklyObjective[] {
   return safeGet<WeeklyObjective[]>(KEYS.WEEKLY_OBJECTIVES, [])
 }
@@ -165,11 +201,13 @@ export function setWeeklyObjectives(objs: WeeklyObjective[]): void {
   safeSet(KEYS.WEEKLY_OBJECTIVES, objs)
 }
 
+/** Return objectives scoped to the given ISO week (defaults to current week). */
 export function getObjectivesForWeek(weekStart?: string): WeeklyObjective[] {
   const ws = weekStart ?? weekStartKey()
   return getWeeklyObjectives().filter((o) => o.weekStart === ws)
 }
 
+/** Create a new weekly objective. */
 export function saveWeeklyObjective(input: Omit<WeeklyObjective, "id" | "createdAt">): WeeklyObjective {
   const obj: WeeklyObjective = { ...input, id: generateId(), createdAt: new Date().toISOString() }
   const all = getWeeklyObjectives()
@@ -183,6 +221,7 @@ export function updateWeeklyObjective(id: string, patch: Partial<WeeklyObjective
   setWeeklyObjectives(all.map((o) => (o.id === id ? { ...o, ...patch } : o)))
 }
 
+/** Delete an objective and any tasks linked to it. */
 export function deleteWeeklyObjective(id: string): void {
   const all = getWeeklyObjectives()
   const obj = all.find(o => o.id === id)
@@ -193,12 +232,14 @@ export function deleteWeeklyObjective(id: string): void {
   }
 }
 
+/** Return objectives for a specific goal within a given week. */
 export function getObjectivesForGoal(goalId: string, weekStart?: string): WeeklyObjective[] {
   return getObjectivesForWeek(weekStart).filter(o => o.goalId === goalId)
 }
 
-// ── Daily Tasks ──
+// ── Daily Tasks ────────────────────────────────────────────────────────────────
 
+/** Return all daily tasks. */
 export function getDailyTasks(): Task[] {
   return safeGet<Task[]>(KEYS.DAILY_TASKS, [])
 }
@@ -207,10 +248,12 @@ export function setDailyTasks(tasks: Task[]): void {
   safeSet(KEYS.DAILY_TASKS, tasks)
 }
 
+/** Return tasks scheduled for a specific calendar date. */
 export function getTasksForDate(date: string): Task[] {
   return getDailyTasks().filter((t) => t.scheduledDate === date)
 }
 
+/** Create a new daily task. */
 export function saveTask(input: Omit<Task, "id" | "createdAt">): Task {
   const task: Task = { ...input, id: generateId(), createdAt: new Date().toISOString() }
   const all = getDailyTasks()
@@ -229,10 +272,12 @@ export function deleteTask(id: string): void {
   setDailyTasks(all.filter((t) => t.id !== id))
 }
 
+/** Return all tasks belonging to a specific weekly objective. */
 export function getTasksForObjective(objectiveId: string): Task[] {
   return getDailyTasks().filter((t) => t.objectiveId === objectiveId)
 }
 
+/** Return all tasks linked to objectives in the given week. */
 export function getTasksForWeek(weekStart?: string): Task[] {
   const ws = weekStart ?? weekStartKey()
   const objectives = getObjectivesForWeek(ws)
@@ -240,8 +285,9 @@ export function getTasksForWeek(weekStart?: string): Task[] {
   return getDailyTasks().filter(t => t.objectiveId && objIds.has(t.objectiveId))
 }
 
-// ── Carryover (kept for backward compat) ──
+// ── Carryover (kept for backward compat) ───────────────────────────────────────
 
+/** Return pending carryover task names (legacy). */
 export function getCarryover(): string[] {
   return safeGet<string[]>(KEYS.PENDING_CARRYOVER, [])
 }
@@ -250,8 +296,9 @@ export function setCarryover(tasks: string[]): void {
   safeSet(KEYS.PENDING_CARRYOVER, tasks)
 }
 
-// ── Roadmaps ──
+// ── Roadmaps (legacy flat) ─────────────────────────────────────────────────────
 
+/** Return the legacy flat roadmap map. */
 export function getRoadmaps(): RoadmapMap {
   return safeGet<RoadmapMap>(KEYS.ROADMAPS, {})
 }
@@ -289,8 +336,9 @@ export function cleanOrphanedRoadmaps(goalIds: string[]): void {
   if (changed) setRoadmaps(all)
 }
 
-// ── Roadmap Trees (hierarchical) ──
+// ── Roadmap Trees (hierarchical) ───────────────────────────────────────────────
 
+/** Return all hierarchical roadmap trees. */
 export function getRoadmapTrees(): Record<string, RoadmapTree> {
   return safeGet<Record<string, RoadmapTree>>(KEYS.ROADMAP_TREES, {})
 }
@@ -315,6 +363,7 @@ export function deleteRoadmapTree(goalId: string): void {
   setRoadmapTrees(all)
 }
 
+/** Add a node to a goal's roadmap tree, linking it to its parent. */
 export function addRoadmapNode(goalId: string, node: Omit<RoadmapNode, "id" | "createdAt">): RoadmapNode {
   const tree = getRoadmapTree(goalId)
   const full: RoadmapNode = { ...node, id: generateId(), createdAt: new Date().toISOString() }
@@ -336,6 +385,7 @@ export function updateRoadmapNode(goalId: string, nodeId: string, patch: Partial
   saveRoadmapTree(goalId, tree)
 }
 
+/** Recursively delete a node and all its descendants from the tree. */
 export function deleteRoadmapNode(goalId: string, nodeId: string): void {
   const tree = getRoadmapTree(goalId)
   const node = tree[nodeId]
@@ -359,6 +409,7 @@ export function deleteRoadmapNode(goalId: string, nodeId: string): void {
   saveRoadmapTree(goalId, tree)
 }
 
+/** Migrate legacy flat phases into the hierarchical tree format (idempotent). */
 export function migratePhasesToTree(goalId: string): void {
   const phases = getRoadmapForGoal(goalId)
   if (phases.length === 0) return
@@ -402,12 +453,14 @@ export function migratePhasesToTree(goalId: string): void {
   saveRoadmapTree(goalId, tree)
 }
 
-// ── Onboarding ──
+// ── Onboarding ─────────────────────────────────────────────────────────────────
 
+/** Check whether the user has completed the onboarding flow. */
 export function isOnboardingDone(): boolean {
   return safeGet<string>(KEYS.ONBOARDING_DONE, "false") === "true"
 }
 
+/** Mark the onboarding flow as completed. */
 export function setOnboardingDone(): void {
   safeSet(KEYS.ONBOARDING_DONE, "true")
 }

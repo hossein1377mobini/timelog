@@ -1,13 +1,25 @@
+/**
+ * Data migration layer for the Compass application.
+ *
+ * Handles upgrading data shapes from older versions of the app stored
+ * in localStorage. Each `migrate*` function is idempotent – it checks
+ * whether migration has already been performed before writing.
+ *
+ * Call {@link runMigrations} once at app boot (in `providers.tsx`).
+ */
+
 import type {
   Goal, Session, Interruption, Reflection,
 } from "@/lib/types"
-import { generateId } from "@/lib/types"
+import { generateId } from "@/lib/utils"
 import { getGoals, setGoals, getSessions, setSessions, getInterruptions, setInterruptions } from "@/lib/storage"
 
+/** localStorage key used to gate the migration so it only runs once. */
 const MIGRATION_KEY = "compass_migration_v1_done"
 
-// ── Old type definitions (from prior codebase) ──
+// ── Old type definitions (from prior codebase) ──────────────────────────────
 
+/** Shape of a goal in the v0 data model. */
 interface OldGoal {
   id: number
   name: string
@@ -19,6 +31,7 @@ interface OldGoal {
   createdAt: number
 }
 
+/** Shape of a session in the v0 data model. */
 interface OldSession {
   id: number
   taskName: string
@@ -30,6 +43,7 @@ interface OldSession {
   date: string
 }
 
+/** Shape of an interruption in the v0 data model. */
 interface OldInterruption {
   id: number
   type: string
@@ -38,6 +52,7 @@ interface OldInterruption {
   duration?: number
 }
 
+/** Shape of a daily task in the v0 data model. */
 interface OldDailyTask {
   id: number
   text: string
@@ -47,6 +62,7 @@ interface OldDailyTask {
   weeklyTaskId?: number
 }
 
+/** Shape of a morning plan entry in the v0 data model. */
 interface OldMorningPlan {
   oneThing: string
   tasks: OldDailyTask[]
@@ -55,6 +71,7 @@ interface OldMorningPlan {
   energy: number
 }
 
+/** Shape of an evening reflection entry in the v0 data model. */
 interface OldEveningReflection {
   accomplishments: string
   distractions: string
@@ -65,14 +82,16 @@ interface OldEveningReflection {
   mood: number
 }
 
+/** Shape of a combined daily record (morning + evening) in the v0 data model. */
 interface OldDailyRecord {
   date: string
   morning?: OldMorningPlan
   evening?: OldEveningReflection
 }
 
-// ── Helpers ──
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Safely parse JSON, returning `fallback` on null input or parse errors. */
 function safeParse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback
   try {
@@ -82,8 +101,9 @@ function safeParse<T>(raw: string | null, fallback: T): T {
   }
 }
 
-// ── Migrations ──
+// ── Migrations ──────────────────────────────────────────────────────────────
 
+/** Migrate goals from v0 (numeric ids, no description) to v1 schema. */
 function migrateGoals(): boolean {
   const raw = localStorage.getItem("compass_goals")
   if (!raw) return false
@@ -114,6 +134,7 @@ function migrateGoals(): boolean {
   return true
 }
 
+/** Migrate sessions from v0 (numeric timestamps, no taskId) to v1 schema. */
 function migrateSessions(): boolean {
   const raw = localStorage.getItem("compass_sessions")
   if (!raw) return false
@@ -145,6 +166,7 @@ function migrateSessions(): boolean {
   return true
 }
 
+/** Migrate interruptions from v0 (no severity/cause) to v1 schema. */
 function migrateInterruptions(): boolean {
   const raw = localStorage.getItem("compass_interruptions")
   if (!raw) return false
@@ -170,6 +192,7 @@ function migrateInterruptions(): boolean {
   return true
 }
 
+/** Migrate old daily records (morning/evening) into the v1 reflections format. */
 function migrateReflections(): boolean {
   const raw = localStorage.getItem("compass_daily_records")
   if (!raw) return false
@@ -204,8 +227,16 @@ function migrateReflections(): boolean {
   return reflections.length > 0
 }
 
-// ── Main entry ──
+// ── Main entry ──────────────────────────────────────────────────────────────
 
+/**
+ * Run all pending data migrations.
+ *
+ * This function is safe to call on every app boot – it short-circuits
+ * immediately if the migration flag is already set in localStorage.
+ * On success it sets the flag and dispatches a `"storage"` event so
+ * all hooks re-read their data.
+ */
 export function runMigrations(): void {
   if (localStorage.getItem(MIGRATION_KEY) === "true") return
 
