@@ -1,141 +1,176 @@
 /**
- * Single source of truth for all shared constants.
- * Every component should import from here instead of defining its own copy.
+ * Application-wide constants for the Compass time-tracking app.
+ * 
+ * This module centralizes magic numbers and commonly used values
+ * to improve code readability and maintainability.
  */
 
-import type { InterruptionType } from "@/lib/types"
+// ── Time Constants ──────────────────────────────────────────────────────────
 
-// ── Goal colour palette ──────────────────────────────────────────────────────
+/** Number of milliseconds in one second */
+export const MILLISECONDS_PER_SECOND = 1000;
 
-export interface GoalColor {
-  name: string
-  bar: string
-  cat: string
-  badge: string
-}
+/** Number of milliseconds in one minute (60,000) */
+export const MILLISECONDS_PER_MINUTE = 60 * MILLISECONDS_PER_SECOND;
 
-export const GOAL_COLORS: GoalColor[] = [
-  {
-    name: "Purple",
-    bar: "#534AB7",
-    cat: "bg-[#EEEDFE] text-[#3C3489] dark:bg-[#26215C] dark:text-[#CECBF6]",
-    badge: "bg-[#EEEDFE] text-[#534AB7] dark:bg-[#26215C] dark:text-[#CECBF6]",
-  },
-  {
-    name: "Teal",
-    bar: "#0F6E56",
-    cat: "bg-[#E1F5EE] text-[#085041] dark:bg-[#04342C] dark:text-[#9FE1CB]",
-    badge: "bg-[#E1F5EE] text-[#0F6E56] dark:bg-[#04342C] dark:text-[#9FE1CB]",
-  },
-  {
-    name: "Amber",
-    bar: "#854F0B",
-    cat: "bg-[#FAEEDA] text-[#633806] dark:bg-[#412402] dark:text-[#FAC775]",
-    badge: "bg-[#FAEEDA] text-[#854F0B] dark:bg-[#412402] dark:text-[#FAC775]",
-  },
-  {
-    name: "Gray",
-    bar: "#5F5E5A",
-    cat: "bg-[#F1EFE8] text-[#444441] dark:bg-[#2C2C2A] dark:text-[#D3D1C7]",
-    badge: "bg-[#F1EFE8] text-[#5F5E5A] dark:bg-[#2C2C2A] dark:text-[#D3D1C7]",
-  },
-  {
-    name: "Blue",
-    bar: "#185FA5",
-    cat: "bg-[#E6F1FB] text-[#0C447C] dark:bg-[#042C53] dark:text-[#B5D4F4]",
-    badge: "bg-[#E6F1FB] text-[#185FA5] dark:bg-[#042C53] dark:text-[#B5D4F4]",
-  },
-  {
-    name: "Coral",
-    bar: "#993C1D",
-    cat: "bg-[#FAECE7] text-[#712B13] dark:bg-[#4A1B0C] dark:text-[#F5C4B3]",
-    badge: "bg-[#FAECE7] text-[#993C1D] dark:bg-[#4A1B0C] dark:text-[#F5C4B3]",
-  },
-]
+/** Number of milliseconds in one hour (3,600,000) */
+export const MILLISECONDS_PER_HOUR = 60 * MILLISECONDS_PER_MINUTE;
 
-/** Map of color name → Tailwind classes for category badges (e.g. DailyPlanning) */
-export const GOAL_COLOR_MAP: Record<string, string> = Object.fromEntries(
-  GOAL_COLORS.map((c) => [c.name, c.cat])
-)
+/** Number of milliseconds in one day (86,400,000) */
+export const MILLISECONDS_PER_DAY = 24 * MILLISECONDS_PER_HOUR;
 
-/** Map of color name → full colour object (bar, cat, badge) */
-export const GOAL_COLOR_RECORD: Record<string, GoalColor> = Object.fromEntries(
-  GOAL_COLORS.map((c) => [c.name, c])
-)
+/** Number of seconds in one minute */
+export const SECONDS_PER_MINUTE = 60;
 
-/** Map of color name → bar hex string (e.g. for RoadmapTreeView) */
-export const GOAL_BAR_MAP: Record<string, string> = Object.fromEntries(
-  GOAL_COLORS.map((c) => [c.name, c.bar])
-)
+/** Number of seconds in one hour (3,600) */
+export const SECONDS_PER_HOUR = 60 * SECONDS_PER_MINUTE;
 
-/** Default color name */
-export const DEFAULT_GOAL_COLOR = GOAL_COLORS[0].name
+/** Number of seconds in one day (86,400) */
+export const SECONDS_PER_DAY = 24 * SECONDS_PER_HOUR;
 
-// ── Pomodoro presets ─────────────────────────────────────────────────────────
+/** Number of minutes in one hour */
+export const MINUTES_PER_HOUR = 60;
 
-export interface PomodoroPreset {
-  label: string
-  work: number
-  break: number
-}
+/** Number of hours in one day */
+export const HOURS_PER_DAY = 24;
 
-export const POMODORO_PRESETS: PomodoroPreset[] = [
-  { label: "25 / 5", work: 25, break: 5 },
-  { label: "50 / 10", work: 50, break: 10 },
-  { label: "90 / 20", work: 90, break: 20 },
-]
+// ── Date & Calendar Constants ───────────────────────────────────────────────
 
-// ── Interruption type metadata ───────────────────────────────────────────────
+/** Number of days in a week */
+export const DAYS_PER_WEEK = 7;
 
-export const INTERRUPTION_TYPE_META: {
-  value: InterruptionType
-  emoji: string
-  label: string
-  color: string
-}[] = [
-  {
-    value: "distraction",
-    emoji: "📱",
-    label: "Distraction",
-    color: "bg-[hsl(var(--error))]/10 text-[hsl(var(--error))]",
-  },
-  {
-    value: "external",
-    emoji: "👤",
-    label: "External",
-    color: "bg-[hsl(var(--timeline-thinking))]/40 text-[hsl(var(--body-strong))]",
-  },
-  {
-    value: "thought",
-    emoji: "🧠",
-    label: "Thought",
-    color: "bg-[hsl(var(--timeline-edit))]/40 text-[hsl(var(--body-strong))]",
-  },
-  {
-    value: "break",
-    emoji: "😴",
-    label: "Break",
-    color: "bg-[hsl(var(--timeline-read))]/40 text-[hsl(var(--body-strong))]",
-  },
-  {
-    value: "admin",
-    emoji: "📋",
-    label: "Admin",
-    color: "bg-[hsl(var(--muted))]/20 text-[hsl(var(--muted))]",
-  },
-]
+/** ISO weekday number for Monday (1) */
+export const WEEKDAY_MONDAY = 1;
 
-// ── Moods ────────────────────────────────────────────────────────────────────
+/** ISO weekday number for Sunday (0 or 7) */
+export const WEEKDAY_SUNDAY = 0;
 
-export const MOODS = ["😔", "😐", "🙂", "😊", "🤩"]
+/** Maximum number of days to check for streak calculation (10 years safety limit) */
+export const MAX_STREAK_DAYS = 3650;
 
-// ── Goal form defaults ───────────────────────────────────────────────────────
+// ── Default Pagination Values ───────────────────────────────────────────────
 
-export const EMPTY_GOAL_FORM = {
-  name: "",
-  tag: "",
-  targetHours: 100,
-  deadline: "",
-  weeklyTarget: 10,
-  color: DEFAULT_GOAL_COLOR,
-}
+/** Default page size for database queries */
+export const DEFAULT_PAGE_SIZE = 50;
+
+/** Maximum page size allowed for database queries */
+export const MAX_PAGE_SIZE = 1000;
+
+// ── UI Constants ────────────────────────────────────────────────────────────
+
+/** Default mood rating (1-5 scale) */
+export const DEFAULT_MOOD = 3;
+
+/** Default energy level (1-5 scale) */
+export const DEFAULT_ENERGY = 3;
+
+/** Default productivity rating (1-5 scale) */
+export const DEFAULT_RATING = 3;
+
+/** Minimum rating value */
+export const MIN_RATING = 1;
+
+/** Maximum rating value */
+export const MAX_RATING = 5;
+
+/** Mood emoji options for daily planning */
+export const MOODS = ["😊", "😐", "😔", "😤", "😴"] as const;
+
+/** Goal color mapping with Tailwind CSS classes */
+export const GOAL_COLOR_MAP = {
+  Purple: "bg-[#534AB7]/10 text-[#534AB7]",
+  Teal: "bg-[#0F6E56]/10 text-[#0F6E56]",
+  Amber: "bg-[#854F0B]/10 text-[#854F0B]",
+  Gray: "bg-[#5F5E5A]/10 text-[#5F5E5A]",
+  Blue: "bg-[#185FA5]/10 text-[#185FA5]",
+  Coral: "bg-[#993C1D]/10 text-[#993C1D]",
+} as const;
+
+/** Goal color record for WeeklyPlan components */
+export const GOAL_COLOR_RECORD = {
+  Purple: { bar: "#534AB7", cat: "bg-[#534AB7]/10 text-[#534AB7]", badge: "bg-[#534AB7]/20" },
+  Teal: { bar: "#0F6E56", cat: "bg-[#0F6E56]/10 text-[#0F6E56]", badge: "bg-[#0F6E56]/20" },
+  Amber: { bar: "#854F0B", cat: "bg-[#854F0B]/10 text-[#854F0B]", badge: "bg-[#854F0B]/20" },
+  Gray: { bar: "#5F5E5A", cat: "bg-[#5F5E5A]/10 text-[#5F5E5A]", badge: "bg-[#5F5E5A]/20" },
+  Blue: { bar: "#185FA5", cat: "bg-[#185FA5]/10 text-[#185FA5]", badge: "bg-[#185FA5]/20" },
+  Coral: { bar: "#993C1D", cat: "bg-[#993C1D]/10 text-[#993C1D]", badge: "bg-[#993C1D]/20" },
+} as const;
+
+// ── Storage Constants ───────────────────────────────────────────────────────
+
+/** localStorage key prefix for all Compass data */
+export const STORAGE_KEY_PREFIX = "compass_";
+
+/** Maximum localStorage size limit (typical browser limit: 5-10MB) */
+export const LOCALSTORAGE_SIZE_LIMIT_MB = 5;
+
+// ── Analytics Constants ─────────────────────────────────────────────────────
+
+/** Minimum session duration to count as productive (in seconds) */
+export const MIN_PRODUCTIVE_SESSION_DURATION = 300; // 5 minutes
+
+/** Default pomodoro duration (in minutes) */
+export const DEFAULT_POMODORO_DURATION = 25;
+
+/** Default break duration (in minutes) */
+export const DEFAULT_BREAK_DURATION = 5;
+
+/** Default long break duration (in minutes) */
+export const DEFAULT_LONG_BREAK_DURATION = 15;
+
+// ── Database Constants ──────────────────────────────────────────────────────
+
+/** Default database connection pool size */
+export const DB_POOL_SIZE = 20;
+
+/** Database query timeout (in milliseconds) */
+export const DB_QUERY_TIMEOUT = 30000; // 30 seconds
+
+// ── Priority Labels ─────────────────────────────────────────────────────────
+
+export const PRIORITY_LABELS = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgent: "Urgent",
+} as const;
+
+// ── Status Labels ───────────────────────────────────────────────────────────
+
+export const STATUS_LABELS = {
+  pending: "Pending",
+  active: "Active",
+  completed: "Completed",
+  archived: "Archived",
+  paused: "Paused",
+} as const;
+
+// ── Interruption Types ──────────────────────────────────────────────────────
+
+export const INTERRUPTION_TYPES = {
+  internal: "Internal",
+  external: "External",
+  technical: "Technical",
+  break: "Break",
+} as const;
+
+// ── Color Palette ───────────────────────────────────────────────────────────
+
+export const DEFAULT_GOAL_COLORS = [
+  "#3b82f6", // blue
+  "#10b981", // green
+  "#f59e0b", // amber
+  "#ef4444", // red
+  "#8b5cf6", // purple
+  "#ec4899", // pink
+  "#06b6d4", // cyan
+  "#f97316", // orange
+] as const;
+
+// ── Feature Flags ───────────────────────────────────────────────────────────
+
+/** Enable debug logging in development */
+export const DEBUG_MODE = process.env.NODE_ENV === "development";
+
+/** Enable analytics tracking */
+export const ANALYTICS_ENABLED = process.env.NEXT_PUBLIC_ANALYTICS_ENABLED === "true";

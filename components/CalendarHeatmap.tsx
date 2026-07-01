@@ -50,9 +50,9 @@ export default function CalendarHeatmap() {
     function onStorage() {
       setDays(computeDays());
     }
-    window.addEventListener("storage", onStorage);
+    window.addEventListener("compass-storage-update", onStorage);
     onStorage(); // initial load after mount
-    return () => window.removeEventListener("storage", onStorage);
+    return () => window.removeEventListener("compass-storage-update", onStorage);
   }, []);
 
   function level(seconds: number) {

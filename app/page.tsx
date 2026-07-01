@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { runMigrations } from "@/lib/migration";
+import { runMigrationsAction, checkOnboardingAction, completeOnboardingAction } from "@/app/actions";
 import TimerCard from "@/components/TimerCard";
 import SessionHistory from "@/components/SessionHistory";
 import WeeklyReport from "@/components/WeeklyReport";
@@ -31,17 +31,18 @@ export default function Home() {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
-    runMigrations();
-    function checkOnboarding() {
-      if (!localStorage.getItem("compass_onboarding_done")) {
+    runMigrationsAction();
+    async function checkOnboarding() {
+      const done = await checkOnboardingAction();
+      if (!done) {
         setShowOnboarding(true);
       }
     }
     checkOnboarding();
   }, []);
 
-  function completeOnboarding() {
-    localStorage.setItem("compass_onboarding_done", "true");
+  async function completeOnboarding() {
+    await completeOnboardingAction();
     setShowOnboarding(false);
   }
 

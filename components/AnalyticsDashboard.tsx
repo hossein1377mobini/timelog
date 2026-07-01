@@ -386,8 +386,8 @@ export default function AnalyticsDashboard() {
       setRecords(d.records);
       setInterruptions(d.interruptions);
     }
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener("compass-storage-update", onStorage);
+    return () => window.removeEventListener("compass-storage-update", onStorage);
   }, []);
 
   const now = new Date();

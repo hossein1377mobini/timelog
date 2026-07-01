@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -21,24 +20,31 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { Timer, Zap, AlertCircle, CheckCircle2 } from "lucide-react"
 
-type InterruptionType = "distraction" | "external" | "break" | "thought"
+import { POMODORO_PRESETS } from "@/lib/constants"
+import {
+  getInterruptions,
+  addInterruption,
+  addSession,
+  dispatchStorageEvent,
+} from "@/lib/storage"
+import type { InterruptionType } from "@/lib/types"
+import { todayKey, formatDuration } from "@/lib/utils"
 
-interface Interruption {
+interface FocusInterruption {
   id: number
   type: InterruptionType
   note: string
   timestamp: number
   duration?: number
+  sessionId: string | null
 }
-
-import { POMODORO_PRESETS } from "@/lib/constants"
-import { getInterruptions, setInterruptions as persistInterruptions } from "@/lib/storage"
 
 const INTERRUPTION_TYPES: { value: InterruptionType; label: string; color: string }[] = [
   { value: "distraction", label: "Distraction", color: "bg-[hsl(var(--error))]/10 text-[hsl(var(--error))]" },
   { value: "external", label: "External", color: "bg-[hsl(var(--timeline-thinking))]/40 text-[hsl(var(--body-strong))]" },
   { value: "break", label: "Break", color: "bg-[hsl(var(--timeline-read))]/40 text-[hsl(var(--body-strong))]" },
   { value: "thought", label: "Thought", color: "bg-[hsl(var(--timeline-edit))]/40 text-[hsl(var(--body-strong))]" },
+  { value: "admin", label: "Admin", color: "bg-[hsl(var(--muted))]/40 text-[hsl(var(--body-strong))]" },
 ]
 
 function formatMMSS(seconds: number) {
@@ -51,11 +57,12 @@ export default function FocusMode() {
   const [preset, setPreset] = useState(POMODORO_PRESETS[0])
   const [phase, setPhase] = useState<"idle" | "work" | "break">("idle")
   const [secondsLeft, setSecondsLeft] = useState(preset.work * 60)
-  const [interruptions, setInterruptionsState] = useState<Interruption[]>([])
+  const [localInterruptions, setLocalInterruptions] = useState<FocusInterruption[]>([])
   const [showInterrupt, setShowInterrupt] = useState(false)
   const [interruptType, setInterruptType] = useState<InterruptionType>("distraction")
   const [interruptNote, setInterruptNote] = useState("")
   const [completedPomodoros, setCompletedPomodoros] = useState(0)
+  const [workStartTime, setWorkStartTime] = useState<number>(0)
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const interruptStartRef = useRef<number | null>(null)
@@ -71,13 +78,12 @@ export default function FocusMode() {
         if (s <= 1) {
           clearInterval(intervalRef.current!)
           if (phase === "work") {
-            setCompletedPomodoros(p => p + 1)
-            setPhase("break")
-            return preset.break * 60
+            handlePomodoroComplete()
           } else {
             setPhase("idle")
             return preset.work * 60
           }
+          return preset.work * 60
         }
         return s - 1
       })
@@ -88,12 +94,53 @@ export default function FocusMode() {
   function startWork() {
     setPhase("work")
     setSecondsLeft(preset.work * 60)
+    setWorkStartTime(Date.now())
+  }
+
+  function handlePomodoroComplete() {
+    // Save session for the completed pomodoro
+    const duration = preset.work * 60
+    addSession({
+      taskId: null,
+      taskName: "Focus session",
+      tags: ["#focus"],
+      duration,
+      durationFormatted: formatDuration(duration),
+      startedAt: new Date(workStartTime).toISOString(),
+      endedAt: new Date().toISOString(),
+      date: todayKey(),
+      pomodoroCount: completedPomodoros + 1,
+      productivityRating: null,
+    })
+    dispatchStorageEvent()
+    setCompletedPomodoros(p => p + 1)
+    setPhase("break")
   }
 
   function stopSession() {
     if (intervalRef.current) clearInterval(intervalRef.current)
+    // If we were in work phase, save the partial session
+    if (phase === "work" && workStartTime > 0) {
+      const elapsed = Math.floor((Date.now() - workStartTime) / 1000)
+      if (elapsed > 0) {
+        addSession({
+          taskId: null,
+          taskName: "Focus session",
+          tags: ["#focus"],
+          duration: elapsed,
+          durationFormatted: formatDuration(elapsed),
+          startedAt: new Date(workStartTime).toISOString(),
+          endedAt: new Date().toISOString(),
+          date: todayKey(),
+          pomodoroCount: completedPomodoros,
+          productivityRating: null,
+        })
+        dispatchStorageEvent()
+      }
+    }
     setPhase("idle")
     setSecondsLeft(preset.work * 60)
+    setWorkStartTime(0)
   }
 
   function openInterruptDialog() {
@@ -102,40 +149,55 @@ export default function FocusMode() {
     setShowInterrupt(true)
   }
 
-  function saveInterruption() {
-    const duration = interruptStartRef.current
-      ? Math.round((Date.now() - interruptStartRef.current) / 1000)
-      : undefined
-    const entry: Interruption = {
-      id: Date.now(),
-      type: interruptType,
-      note: interruptNote.trim(),
-      timestamp: Date.now(),
-      duration,
-    }
-    const updated = [entry, ...interruptions]
-    setInterruptionsState(updated)
-    persistInterruptions(updated as any)
-    setInterruptNote("")
-    setShowInterrupt(false)
+  function resumeTimer() {
     if (phase !== "idle") {
       intervalRef.current = setInterval(() => {
         setSecondsLeft(s => {
           if (s <= 1) {
             clearInterval(intervalRef.current!)
             if (phase === "work") {
-              setCompletedPomodoros(p => p + 1)
-              setPhase("break")
-              return preset.break * 60
+              handlePomodoroComplete()
             } else {
               setPhase("idle")
               return preset.work * 60
             }
+            return preset.work * 60
           }
           return s - 1
         })
       }, 1000)
     }
+  }
+
+  function saveInterruption() {
+    const duration = interruptStartRef.current
+      ? Math.round((Date.now() - interruptStartRef.current) / 1000)
+      : undefined
+    const entry: FocusInterruption = {
+      id: Date.now(),
+      type: interruptType,
+      note: interruptNote.trim(),
+      timestamp: Date.now(),
+      duration,
+      sessionId: null,
+    }
+    setLocalInterruptions(prev => [entry, ...prev])
+    // Persist to global storage using the proper addInterruption function
+    // instead of overwriting all interruptions
+    addInterruption({
+      sessionId: null,
+      type: interruptType,
+      cause: interruptNote.trim(),
+      duration: duration ?? 0,
+      note: interruptNote.trim(),
+      timestamp: new Date().toISOString(),
+      recoveryTime: 0,
+      severity: "low",
+    })
+    dispatchStorageEvent()
+    setInterruptNote("")
+    setShowInterrupt(false)
+    resumeTimer()
   }
 
   function changePreset(label: string) {
@@ -151,8 +213,6 @@ export default function FocusMode() {
     : phase === "break"
     ? ((preset.break * 60 - secondsLeft) / (preset.break * 60)) * 100
     : 0
-
-  const typeInfo = INTERRUPTION_TYPES.find(t => t.value === interruptType)!
 
   return (
     <>
@@ -249,12 +309,12 @@ export default function FocusMode() {
             )}
           </div>
 
-          {interruptions.length > 0 && (
+          {localInterruptions.length > 0 && (
             <div className="space-y-1.5 pt-1 border-t border-[hsl(var(--hairline))]">
               <p className="text-[10px] uppercase tracking-[0.08em] text-[hsl(var(--muted))] font-semibold pt-1">
-                Today&apos;s interruptions
+                Today's interruptions
               </p>
-              {interruptions.slice(0, 3).map(item => {
+              {localInterruptions.slice(0, 3).map(item => {
                 const t = INTERRUPTION_TYPES.find(x => x.value === item.type)!
                 return (
                   <div key={item.id} className="flex items-start gap-2 py-1">
@@ -272,9 +332,9 @@ export default function FocusMode() {
                   </div>
                 )
               })}
-              {interruptions.length > 3 && (
+              {localInterruptions.length > 3 && (
                 <p className="text-[10px] text-[hsl(var(--muted))]">
-                  +{interruptions.length - 3} more
+                  +{localInterruptions.length - 3} more
                 </p>
               )}
             </div>
@@ -328,24 +388,7 @@ export default function FocusMode() {
               size="sm"
               onClick={() => {
                 setShowInterrupt(false)
-                if (phase !== "idle") {
-                  intervalRef.current = setInterval(() => {
-                    setSecondsLeft(s => {
-                      if (s <= 1) {
-                        clearInterval(intervalRef.current!)
-                        if (phase === "work") {
-                          setCompletedPomodoros(p => p + 1)
-                          setPhase("break")
-                          return preset.break * 60
-                        } else {
-                          setPhase("idle")
-                          return preset.work * 60
-                        }
-                      }
-                      return s - 1
-                    })
-                  }, 1000)
-                }
+                resumeTimer()
               }}
               className="text-[hsl(var(--muted))] hover:text-[hsl(var(--body-strong))]"
             >

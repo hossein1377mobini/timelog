@@ -108,7 +108,8 @@ function migrateGoals(): boolean {
   const raw = localStorage.getItem("compass_goals")
   if (!raw) return false
   const existing = getGoals()
-  if (existing.length > 0 && "description" in existing[0]) return false
+  // Fix: Check if array is not empty AND first element exists before accessing properties
+  if (existing.length > 0 && existing[0] && "description" in existing[0]) return false
 
   const old: OldGoal[] = safeParse<OldGoal[]>(raw, [])
   if (old.length === 0) return false
@@ -236,8 +237,17 @@ function migrateReflections(): boolean {
  * immediately if the migration flag is already set in localStorage.
  * On success it sets the flag and dispatches a `"storage"` event so
  * all hooks re-read their data.
+ * 
+ * ⚠️ IMPORTANT: This function ONLY runs on the client side (browser).
+ * It will silently return if called during server-side rendering.
  */
 export function runMigrations(): void {
+  // Guard: Only run on client side where localStorage exists
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    console.warn("Migrations can only run in the browser (localStorage required)");
+    return;
+  }
+
   if (localStorage.getItem(MIGRATION_KEY) === "true") return
 
   let changed = false
@@ -249,11 +259,11 @@ export function runMigrations(): void {
 
     if (changed) {
       localStorage.setItem(MIGRATION_KEY, "true")
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("storage"))
-      }
+      window.dispatchEvent(new Event("storage"))
+      console.log("✓ Data migrations completed successfully");
     }
   } catch (e) {
     console.error("Migration failed:", e)
+    throw new Error(e instanceof Error ? e.message : "Migration failed with unknown error");
   }
 }

@@ -59,9 +59,9 @@ export default function HabitTracker() {
     function onStorage() {
       setSessions(getSessions());
     }
-    window.addEventListener("storage", onStorage);
+    window.addEventListener("compass-storage-update", onStorage);
     onStorage(); // initial load after mount
-    return () => window.removeEventListener("storage", onStorage);
+    return () => window.removeEventListener("compass-storage-update", onStorage);
   }, []);
 
   // ── Derived data ────────────────────────────────────────────────────────────

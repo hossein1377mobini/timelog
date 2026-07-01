@@ -43,8 +43,8 @@ export default function TimerCard() {
 
   useEffect(() => {
     t.loadTasks();
-    window.addEventListener("storage", t.loadTasks);
-    return () => window.removeEventListener("storage", t.loadTasks);
+    window.addEventListener("compass-storage-update", t.loadTasks);
+    return () => window.removeEventListener("compass-storage-update", t.loadTasks);
   }, [t.loadTasks]);
 
   return (

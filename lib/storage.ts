@@ -50,22 +50,34 @@ function safeSet<T>(key: string, value: T): void {
   }
 }
 
-/** Broadcast a synthetic `"storage"` event so other hooks re-read their state. */
+/** Broadcast a custom event so all components re-read their state.
+ *  Uses a dedicated custom event name (`compass-storage-update`) so that
+ *  same-tab writes are picked up (the native `"storage"` event only fires
+ *  for *other* tabs). Components should listen for both events. */
 export function dispatchStorageEvent(): void {
   if (typeof window === "undefined") return
-  window.dispatchEvent(new Event("storage"))
+  window.dispatchEvent(new Event("compass-storage-update"))
 }
 
 /**
  * Subscribe to cross-tab / cross-component `"storage"` events.
+ * This is NOT a React hook - it's a subscription function.
+ * Use `useStorageSubscription` hook instead for React components.
  *
  * @param handler – callback invoked on every storage change
- * @returns an unsubscribe function (call in `useEffect` cleanup)
+ * @returns an unsubscribe function to clean up the listener
  */
-export function useStorageSync(handler: () => void): () => void {
+export function subscribeToStorage(handler: () => void): () => void {
   if (typeof window === "undefined") return () => {}
+  
+  // Listen to both native storage events (cross-tab) and custom events (same-tab)
   window.addEventListener("storage", handler)
-  return () => window.removeEventListener("storage", handler)
+  window.addEventListener("compass-storage-update", handler)
+  
+  return () => {
+    window.removeEventListener("storage", handler)
+    window.removeEventListener("compass-storage-update", handler)
+  }
 }
 
 // ── Goals ──────────────────────────────────────────────────────────────────────
@@ -81,7 +93,7 @@ export function setGoals(goals: Goal[]): void {
 }
 
 /** Create a new goal, persist it, and return the full object. */
-export function addGoal(input: Omit<Goal, "id" | "roadmap" | "createdAt" | "updatedAt">): Goal {
+export function createGoal(input: Omit<Goal, "id" | "roadmap" | "createdAt" | "updatedAt">): Goal {
   const now = new Date().toISOString()
   const goal: Goal = { ...input, id: generateId(), roadmap: [], createdAt: now, updatedAt: now }
   const all = getGoals()
@@ -90,21 +102,37 @@ export function addGoal(input: Omit<Goal, "id" | "roadmap" | "createdAt" | "upda
   return goal
 }
 
+/** @deprecated Use createGoal instead. Will be removed in future version. */
+export const addGoal = createGoal
+
 /** Patch an existing goal by `id`. Returns the updated goal or `null` if not found. */
 export function updateGoal(id: string, patch: Partial<Goal>): Goal | null {
   const all = getGoals()
   const idx = all.findIndex((g) => g.id === id)
   if (idx === -1) return null
-  all[idx] = { ...all[idx], ...patch, updatedAt: new Date().toISOString() }
+  const existing = all[idx]
+  if (!existing) return null
+  all[idx] = { ...existing, ...patch, updatedAt: new Date().toISOString() }
   setGoals(all)
-  return all[idx]
+  return all[idx] ?? null
 }
 
-/** Remove a goal and its associated roadmap data. */
+/** Remove a goal and ALL associated data (roadmaps, trees, objectives). */
 export function deleteGoal(id: string): void {
   const all = getGoals()
   setGoals(all.filter((g) => g.id !== id))
-  deleteRoadmapForGoal(id)
+  deleteRoadmapForGoal(id)   // legacy flat roadmaps
+  deleteRoadmapTree(id)      // hierarchical roadmap trees
+  // cascade: remove weekly objectives (and their linked tasks)
+  const objs = getWeeklyObjectives()
+  const orphanedObjIds = objs.filter(o => o.goalId === id).map(o => o.id)
+  setWeeklyObjectives(objs.filter(o => o.goalId !== id))
+  if (orphanedObjIds.length > 0) {
+    const orphanedSet = new Set(orphanedObjIds)
+    const tasks = getDailyTasks()
+    setDailyTasks(tasks.filter(t => !t.objectiveId || !orphanedSet.has(t.objectiveId)))
+  }
+  dispatchStorageEvent()
 }
 
 // ── Sessions ───────────────────────────────────────────────────────────────────
@@ -118,8 +146,8 @@ export function setSessions(sessions: Session[]): void {
   safeSet(KEYS.SESSIONS, sessions)
 }
 
-/** Persist a new session and return it with its generated `id`. */
-export function addSession(input: Omit<Session, "id">): Session {
+/** Create a new session and return it with its generated `id`. */
+export function createSession(input: Omit<Session, "id">): Session {
   const session: Session = { ...input, id: generateId() }
   const all = getSessions()
   all.push(session)
@@ -127,10 +155,23 @@ export function addSession(input: Omit<Session, "id">): Session {
   return session
 }
 
-/** Remove a single session by `id`. */
+/** @deprecated Use createSession instead. Will be removed in future version. */
+export const addSession = createSession
+
+/** Remove a single session by `id`, cleaning up any linked task reference. */
 export function deleteSession(id: string): void {
   const all = getSessions()
+  const session = all.find(s => s.id === id)
   setSessions(all.filter((s) => s.id !== id))
+  // Clean up dangling task.sessionId reference
+  if (session?.taskId) {
+    const tasks = getDailyTasks()
+    const task = tasks.find(t => t.id === session.taskId)
+    if (task?.sessionId === id) {
+      updateTask(session.taskId, { sessionId: null })
+    }
+  }
+  dispatchStorageEvent()
 }
 
 /** Remove all sessions (used by the data reset flow). */
@@ -149,14 +190,17 @@ export function setInterruptions(interruptions: Interruption[]): void {
   safeSet(KEYS.INTERRUPTIONS, interruptions)
 }
 
-/** Persist a new interruption event. */
-export function addInterruption(input: Omit<Interruption, "id">): Interruption {
+/** Create a new interruption event. */
+export function createInterruption(input: Omit<Interruption, "id">): Interruption {
   const item: Interruption = { ...input, id: generateId() }
   const all = getInterruptions()
   all.push(item)
   setInterruptions(all)
   return item
 }
+
+/** @deprecated Use createInterruption instead. Will be removed in future version. */
+export const addInterruption = createInterruption
 
 // ── Reflections ────────────────────────────────────────────────────────────────
 
@@ -175,7 +219,7 @@ export function getReflectionByDate(date: string): Reflection | undefined {
 }
 
 /** Create or update a reflection for the given date (upsert). */
-export function saveReflection(input: Omit<Reflection, "id" | "createdAt">): Reflection {
+export function createOrUpdateReflection(input: Omit<Reflection, "id" | "createdAt">): Reflection {
   const existing = getReflectionByDate(input.date)
   const now = new Date().toISOString()
   if (existing) {
@@ -189,6 +233,9 @@ export function saveReflection(input: Omit<Reflection, "id" | "createdAt">): Ref
   setReflections(all)
   return ref
 }
+
+/** @deprecated Use createOrUpdateReflection instead. Will be removed in future version. */
+export const saveReflection = createOrUpdateReflection
 
 // ── Weekly Objectives ──────────────────────────────────────────────────────────
 
@@ -208,13 +255,16 @@ export function getObjectivesForWeek(weekStart?: string): WeeklyObjective[] {
 }
 
 /** Create a new weekly objective. */
-export function saveWeeklyObjective(input: Omit<WeeklyObjective, "id" | "createdAt">): WeeklyObjective {
+export function createWeeklyObjective(input: Omit<WeeklyObjective, "id" | "createdAt">): WeeklyObjective {
   const obj: WeeklyObjective = { ...input, id: generateId(), createdAt: new Date().toISOString() }
   const all = getWeeklyObjectives()
   all.push(obj)
   setWeeklyObjectives(all)
   return obj
 }
+
+/** @deprecated Use createWeeklyObjective instead. Will be removed in future version. */
+export const saveWeeklyObjective = createWeeklyObjective
 
 export function updateWeeklyObjective(id: string, patch: Partial<WeeklyObjective>): void {
   const all = getWeeklyObjectives()
@@ -254,13 +304,16 @@ export function getTasksForDate(date: string): Task[] {
 }
 
 /** Create a new daily task. */
-export function saveTask(input: Omit<Task, "id" | "createdAt">): Task {
+export function createTask(input: Omit<Task, "id" | "createdAt">): Task {
   const task: Task = { ...input, id: generateId(), createdAt: new Date().toISOString() }
   const all = getDailyTasks()
   all.push(task)
   setDailyTasks(all)
   return task
 }
+
+/** @deprecated Use createTask instead. Will be removed in future version. */
+export const saveTask = createTask
 
 export function updateTask(id: string, patch: Partial<Task>): void {
   const all = getDailyTasks()
@@ -311,11 +364,14 @@ export function getRoadmapForGoal(goalId: string): Phase[] {
   return getRoadmaps()[goalId] ?? []
 }
 
-export function saveRoadmapForGoal(goalId: string, phases: Phase[]): void {
+export function createOrUpdateRoadmapForGoal(goalId: string, phases: Phase[]): void {
   const all = getRoadmaps()
   all[goalId] = phases
   setRoadmaps(all)
 }
+
+/** @deprecated Use createOrUpdateRoadmapForGoal instead. Will be removed in future version. */
+export const saveRoadmapForGoal = createOrUpdateRoadmapForGoal
 
 export function deleteRoadmapForGoal(goalId: string): void {
   const all = getRoadmaps()
@@ -351,11 +407,14 @@ export function getRoadmapTree(goalId: string): RoadmapTree {
   return getRoadmapTrees()[goalId] ?? {}
 }
 
-export function saveRoadmapTree(goalId: string, tree: RoadmapTree): void {
+export function createOrUpdateRoadmapTree(goalId: string, tree: RoadmapTree): void {
   const all = getRoadmapTrees()
   all[goalId] = tree
   setRoadmapTrees(all)
 }
+
+/** @deprecated Use createOrUpdateRoadmapTree instead. Will be removed in future version. */
+export const saveRoadmapTree = createOrUpdateRoadmapTree
 
 export function deleteRoadmapTree(goalId: string): void {
   const all = getRoadmapTrees()
@@ -364,25 +423,31 @@ export function deleteRoadmapTree(goalId: string): void {
 }
 
 /** Add a node to a goal's roadmap tree, linking it to its parent. */
-export function addRoadmapNode(goalId: string, node: Omit<RoadmapNode, "id" | "createdAt">): RoadmapNode {
+export function createRoadmapNode(goalId: string, node: Omit<RoadmapNode, "id" | "createdAt">): RoadmapNode {
   const tree = getRoadmapTree(goalId)
   const full: RoadmapNode = { ...node, id: generateId(), createdAt: new Date().toISOString() }
   tree[full.id] = full
-  if (full.parentId && tree[full.parentId]) {
-    tree[full.parentId] = {
-      ...tree[full.parentId],
-      children: [...tree[full.parentId].children, full.id],
+  if (full.parentId) {
+    const parentNode = tree[full.parentId]
+    if (parentNode) {
+      tree[full.parentId] = {
+        ...parentNode,
+        children: [...parentNode.children, full.id],
+      }
     }
   }
-  saveRoadmapTree(goalId, tree)
+  createOrUpdateRoadmapTree(goalId, tree)
   return full
 }
+
+/** @deprecated Use createRoadmapNode instead. Will be removed in future version. */
+export const addRoadmapNode = createRoadmapNode
 
 export function updateRoadmapNode(goalId: string, nodeId: string, patch: Partial<RoadmapNode>): void {
   const tree = getRoadmapTree(goalId)
   if (!tree[nodeId]) return
   tree[nodeId] = { ...tree[nodeId], ...patch }
-  saveRoadmapTree(goalId, tree)
+  createOrUpdateRoadmapTree(goalId, tree)
 }
 
 /** Recursively delete a node and all its descendants from the tree. */
@@ -391,10 +456,13 @@ export function deleteRoadmapNode(goalId: string, nodeId: string): void {
   const node = tree[nodeId]
   if (!node) return
 
-  if (node.parentId && tree[node.parentId]) {
-    tree[node.parentId] = {
-      ...tree[node.parentId],
-      children: tree[node.parentId].children.filter(id => id !== nodeId),
+  if (node.parentId) {
+    const parentNode = tree[node.parentId]
+    if (parentNode) {
+      tree[node.parentId] = {
+        ...parentNode,
+        children: parentNode.children.filter(id => id !== nodeId),
+      }
     }
   }
 
@@ -406,7 +474,7 @@ export function deleteRoadmapNode(goalId: string, nodeId: string): void {
   }
   removeRecursive(nodeId)
 
-  saveRoadmapTree(goalId, tree)
+  createOrUpdateRoadmapTree(goalId, tree)
 }
 
 /** Migrate legacy flat phases into the hierarchical tree format (idempotent). */
@@ -433,6 +501,8 @@ export function migratePhasesToTree(goalId: string): void {
 
   for (let i = 0; i < phases.length; i++) {
     const p = phases[i]
+    if (!p) continue // Safety check for undefined array elements
+    
     const node: RoadmapNode = {
       id: p.id,
       type: "phase",
@@ -450,7 +520,7 @@ export function migratePhasesToTree(goalId: string): void {
   }
 
   tree[rootNode.id] = rootNode
-  saveRoadmapTree(goalId, tree)
+  createOrUpdateRoadmapTree(goalId, tree)
 }
 
 // ── Onboarding ─────────────────────────────────────────────────────────────────
@@ -464,3 +534,4 @@ export function isOnboardingDone(): boolean {
 export function setOnboardingDone(): void {
   safeSet(KEYS.ONBOARDING_DONE, "true")
 }
+

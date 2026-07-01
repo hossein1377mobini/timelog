@@ -26,8 +26,8 @@ export default function SessionHistory() {
 
   useEffect(() => {
     loadSessions();
-    window.addEventListener("storage", loadSessions);
-    return () => window.removeEventListener("storage", loadSessions);
+    window.addEventListener("compass-storage-update", loadSessions);
+    return () => window.removeEventListener("compass-storage-update", loadSessions);
   }, []);
 
   function loadSessions() {

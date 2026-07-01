@@ -77,10 +77,13 @@ export function currentStreak(sessions: Session[]): number {
     cursor.setDate(cursor.getDate() - 1);
   }
   let streak = 0;
-  while (true) {
+  const MAX_DAYS = 3650; // 10 years safety limit
+  let daysChecked = 0;
+  while (daysChecked < MAX_DAYS) {
     if (!dailies.has(toYMD(cursor))) break;
     streak++;
     cursor.setDate(cursor.getDate() - 1);
+    daysChecked++;
   }
   return streak;
 }

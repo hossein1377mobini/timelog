@@ -20,9 +20,9 @@ export default function MetricsBar() {
     function onStorage() {
       setSessions(getSessions());
     }
-    window.addEventListener("storage", onStorage);
+    window.addEventListener("compass-storage-update", onStorage);
     onStorage();
-    return () => window.removeEventListener("storage", onStorage);
+    return () => window.removeEventListener("compass-storage-update", onStorage);
   }, []);
 
   const now = new Date();

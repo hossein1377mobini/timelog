@@ -35,6 +35,7 @@ export function generateId(): string {
 
 /**
  * Returns the ISO date key (YYYY-MM-DD) for a given date.
+ * Uses local timezone to avoid UTC conversion issues.
  *
  * @param date - The date to format (defaults to today)
  * @returns Date string in "YYYY-MM-DD" format
@@ -44,11 +45,15 @@ export function generateId(): string {
  * todayKey(new Date("2025-01-01")) // "2025-01-01"
  */
 export function todayKey(date = new Date()): string {
-  return date.toISOString().slice(0, 10)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
 }
 
 /**
  * Returns the ISO date key for the Monday of the week containing the given date.
+ * Uses local timezone to avoid UTC conversion issues.
  *
  * @param date - Any date within the target week (defaults to today)
  * @returns Date string in "YYYY-MM-DD" format for the week's Monday
@@ -61,11 +66,15 @@ export function weekStartKey(date = new Date()): string {
   const day = d.getDay()
   const diff = d.getDate() - day + (day === 0 ? -6 : 1)
   d.setDate(diff)
-  return d.toISOString().slice(0, 10)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, "0")
+  const dayStr = String(d.getDate()).padStart(2, "0")
+  return `${year}-${month}-${dayStr}`
 }
 
 /**
  * Returns the ISO date key for the Sunday of the week containing the given date.
+ * Uses local timezone to avoid UTC conversion issues.
  *
  * @param date - Any date within the target week (defaults to today)
  * @returns Date string in "YYYY-MM-DD" format for the week's Sunday
@@ -73,7 +82,10 @@ export function weekStartKey(date = new Date()): string {
 export function weekEndKey(date = new Date()): string {
   const start = new Date(weekStartKey(date))
   start.setDate(start.getDate() + 6)
-  return start.toISOString().slice(0, 10)
+  const year = start.getFullYear()
+  const month = String(start.getMonth() + 1).padStart(2, "0")
+  const day = String(start.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
 }
 
 /**

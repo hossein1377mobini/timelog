@@ -353,8 +353,14 @@ export default function GoalsManager() {
   useEffect(() => {
     loadGoals()
     loadSessions()
-    window.addEventListener("storage", loadSessions)
-    return () => window.removeEventListener("storage", loadSessions)
+    window.addEventListener("compass-storage-update", () => {
+      loadGoals()
+      loadSessions()
+    })
+    return () => window.removeEventListener("compass-storage-update", () => {
+      loadGoals()
+      loadSessions()
+    })
   }, [])
 
   function loadGoals() {
@@ -367,6 +373,7 @@ export default function GoalsManager() {
   function saveGoalsLocal(updated: Goal[]) {
     setGoals(updated)
     setGoalsState(updated)
+    dispatchStorageEvent()
   }
 
   function openAdd() {
@@ -436,7 +443,6 @@ export default function GoalsManager() {
 
   function handleDelete(id: string) {
     saveGoalsLocal(goals.filter(g => g.id !== id))
-    dispatchStorageEvent()
     setDeleteConfirm(null)
   }
 
