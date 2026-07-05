@@ -3,24 +3,23 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Target, ArrowRight, Plus } from "lucide-react"
-import { getGoals, setGoals, dispatchStorageEvent } from "@/lib/storage"
+import { fetchGoals, createGoal } from "@/lib/db-client"
 import type { Goal } from "@/lib/types"
 import GoalRow from "./GoalRow"
 import { EMPTY_DRAFT, normaliseTag, type DraftGoal } from "./types"
 
-const generateId = () => crypto.randomUUID()
-
 export default function StepGoals({ onNext }: { onNext: (goals: Goal[]) => void }) {
-  const [drafts, setDrafts] = useState<DraftGoal[]>([{ id: generateId(), ...EMPTY_DRAFT }])
+  const [drafts, setDrafts] = useState<DraftGoal[]>([{ id: crypto.randomUUID(), ...EMPTY_DRAFT }])
   const [existingGoals, setExistingGoals] = useState<Goal[]>([])
   const [duplicateError, setDuplicateError] = useState("")
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    setExistingGoals(getGoals())
+    fetchGoals().then(setExistingGoals).catch(console.error)
   }, [])
 
   function addRow() {
-    setDrafts(d => [...d, { id: generateId(), ...EMPTY_DRAFT }])
+    setDrafts(d => [...d, { id: crypto.randomUUID(), ...EMPTY_DRAFT }])
   }
 
   function updateRow(id: string, patch: Partial<DraftGoal>) {
@@ -32,56 +31,55 @@ export default function StepGoals({ onNext }: { onNext: (goals: Goal[]) => void 
     setDrafts(d => d.filter(g => g.id !== id))
   }
 
-  function saveAndContinue() {
-    const allGoals = getGoals()
-    const valid: Goal[] = []
+  async function saveAndContinue() {
+    setSaving(true)
+    try {
+      const allGoals = await fetchGoals()
+      const valid: Goal[] = []
 
-    for (const g of drafts) {
-      if (!g.name.trim() || !g.tag.trim()) continue
-      const tag = normaliseTag(g.tag)
-      const name = g.name.trim()
+      for (const g of drafts) {
+        if (!g.name.trim() || !g.tag.trim()) continue
+        const tag = normaliseTag(g.tag)
+        const name = g.name.trim()
 
-      const isDuplicate = allGoals.some(
-        existing => existing.name.trim().toLowerCase() === name.toLowerCase()
-      )
-      if (isDuplicate) {
-        setDuplicateError(`"${name}" already exists`)
-        return
+        const isDuplicate = allGoals.some(
+          existing => existing.name.trim().toLowerCase() === name.toLowerCase()
+        )
+        if (isDuplicate) {
+          setDuplicateError(`"${name}" already exists`)
+          return
+        }
+
+        const savedGoal = await createGoal({
+          name,
+          description: "",
+          category: "",
+          tag,
+          targetHours: Number(g.targetHours) || 100,
+          targetDate: "",
+          weeklyTarget: 0,
+          priority: "medium",
+          status: "active",
+          color: g.color,
+        })
+        valid.push(savedGoal)
       }
 
-      valid.push({
-        id: generateId(),
-        name,
-        description: "",
-        category: "",
-        tag,
-        targetHours: Number(g.targetHours) || 100,
-        targetDate: "",
-        weeklyTarget: 0,
-        priority: "medium",
-        status: "active",
-        color: g.color,
-        roadmap: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      })
+      onNext(valid)
+    } catch (e) {
+      console.error("Failed to save goals:", e)
+    } finally {
+      setSaving(false)
     }
-
-    if (valid.length > 0) {
-      try {
-        const updated = [...allGoals, ...valid]
-        setGoals(updated)
-        dispatchStorageEvent()
-      } catch (e) {
-        console.error("Failed to save goals:", e)
-      }
-    }
-    onNext(valid)
   }
 
-  function handleSkip() {
-    const existing = getGoals()
-    onNext(existing)
+  async function handleSkip() {
+    try {
+      const existing = await fetchGoals()
+      onNext(existing)
+    } catch {
+      onNext([])
+    }
   }
 
   const hasAnyValid = drafts.some(g => g.name.trim() && g.tag.trim())
@@ -131,9 +129,9 @@ export default function StepGoals({ onNext }: { onNext: (goals: Goal[]) => void 
         <Button
           className="w-full gap-2 transition-all hover:scale-[1.01] active:scale-[0.98]"
           onClick={saveAndContinue}
-          disabled={!hasAnyValid}
+          disabled={!hasAnyValid || saving}
         >
-          Save goals & continue
+          {saving ? "Saving..." : "Save goals & continue"}
           <ArrowRight size={14} />
         </Button>
         <button

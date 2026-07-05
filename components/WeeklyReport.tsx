@@ -1,35 +1,29 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getSessions } from "@/lib/storage";
+import { useSessionsDb } from "@/lib/hooks/useDb";
 import type { Session } from "@/lib/types";
 
 export default function WeeklyReport() {
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const { data: sessionsData } = useSessionsDb();
+  const sessions = sessionsData ?? [];
 
-  useEffect(() => {
-    loadSessions();
-    window.addEventListener("compass-storage-update", loadSessions);
-    return () => window.removeEventListener("compass-storage-update", loadSessions);
-  }, []);
-
-  function loadSessions() {
-    const all = getSessions();
+  const weekSessions = useMemo(() => {
     const now = new Date();
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - now.getDay());
     weekStart.setHours(0, 0, 0, 0);
-    setSessions(all.filter((s) => new Date(s.startedAt) >= weekStart));
-  }
+    return sessions.filter((s) => new Date(s.startedAt) >= weekStart);
+  }, [sessions]);
 
   function handleExport() {
-    const totalSeconds = sessions.reduce((sum, s) => sum + s.duration, 0);
+    const totalSeconds = weekSessions.reduce((sum, s) => sum + s.duration, 0);
     const totalHours = (totalSeconds / 3600).toFixed(1);
 
-    const tagSummary = sessions.reduce<Record<string, number>>((acc, s) => {
+    const tagSummary = weekSessions.reduce<Record<string, number>>((acc, s) => {
       (s.tags || []).forEach((tag) => {
         acc[tag] = (acc[tag] || 0) + s.duration;
       });
@@ -50,14 +44,14 @@ export default function WeeklyReport() {
       ),
       "",
       "SESSIONS",
-      ...sessions.map(
+      ...weekSessions.map(
         (s) =>
           `  ${new Date(s.startedAt).toLocaleString()} - ${s.taskName} (${(s.duration / 60).toFixed(1)} min) ${(s.tags || []).join(" ")}`,
       ),
       "",
       `---`,
-      `Total sessions: ${sessions.length}`,
-      `Average session: ${sessions.length ? Math.round(totalSeconds / sessions.length / 60) : 0} min`,
+      `Total sessions: ${weekSessions.length}`,
+      `Average session: ${weekSessions.length ? Math.round(totalSeconds / weekSessions.length / 60) : 0} min`,
     ];
 
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
@@ -69,9 +63,9 @@ export default function WeeklyReport() {
     URL.revokeObjectURL(url);
   }
 
-  const totalSeconds = sessions.reduce((sum, s) => sum + s.duration, 0);
+  const totalSeconds = weekSessions.reduce((sum, s) => sum + s.duration, 0);
 
-  const tagSummary = sessions.reduce<Record<string, number>>((acc, s) => {
+  const tagSummary = weekSessions.reduce<Record<string, number>>((acc, s) => {
     s.tags.forEach((tag) => {
       acc[tag] = (acc[tag] || 0) + s.duration;
     });
@@ -86,13 +80,13 @@ export default function WeeklyReport() {
           variant="outline"
           size="sm"
           onClick={handleExport}
-          disabled={sessions.length === 0}
+          disabled={weekSessions.length === 0}
         >
           Export
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        {sessions.length === 0 ? (
+        {weekSessions.length === 0 ? (
           <p className="text-[14px] text-[hsl(var(--muted))] text-center py-4">
             No sessions this week yet.
           </p>
@@ -104,7 +98,7 @@ export default function WeeklyReport() {
                 {(totalSeconds / 3600).toFixed(1)}h
               </span>
               {" · "}
-              {sessions.length} session{sessions.length !== 1 ? "s" : ""}
+              {weekSessions.length} session{weekSessions.length !== 1 ? "s" : ""}
             </div>
             <div className="flex flex-wrap gap-2">
               {Object.entries(tagSummary).map(([tag, secs]) => (

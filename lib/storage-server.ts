@@ -46,7 +46,8 @@ import {
 
 /** Return all focus sessions from database (async). */
 export async function getSessionsAsync(): Promise<Session[]> {
-  return await dbGetAllSessions()
+  const { sessions } = await dbGetAllSessions()
+  return sessions
 }
 
 /** Persist a new session to database and return it with its generated ID (async). */
@@ -86,7 +87,8 @@ import {
 
 /** Return all interruptions from database (async). */
 export async function getInterruptionsAsync(): Promise<Interruption[]> {
-  return await dbGetAllInterruptions()
+  const { interruptions } = await dbGetAllInterruptions()
+  return interruptions
 }
 
 /** Persist a new interruption to database and return it with its generated ID (async). */
@@ -112,7 +114,8 @@ import {
 
 /** Return all goals from database (async). */
 export async function getGoalsAsync(): Promise<Goal[]> {
-  return await dbGetAllGoals()
+  const { goals } = await dbGetAllGoals()
+  return goals
 }
 
 /** Create a new goal in database and return it with its generated ID (async). */
@@ -155,7 +158,8 @@ import {
 
 /** Return all reflections from database (async). */
 export async function getReflectionsAsync(): Promise<Reflection[]> {
-  return await dbGetAllReflections()
+  const { reflections } = await dbGetAllReflections()
+  return reflections
 }
 
 /** Get a reflection by date from database (async). */
@@ -327,7 +331,8 @@ import {
 
 /** Get all legacy roadmap phases for all goals from database (async). */
 export async function getRoadmapsAsync(): Promise<RoadmapMap> {
-  return await dbGetRoadmaps()
+  const { roadmaps } = await dbGetRoadmaps()
+  return roadmaps
 }
 
 /** Get legacy roadmap phases for a specific goal from database (async). */
@@ -349,7 +354,8 @@ export async function deleteRoadmapForGoalAsync(goalId: string): Promise<void> {
 
 /** Get all hierarchical roadmap trees for all goals from database (async). */
 export async function getRoadmapTreesAsync(): Promise<Record<string, RoadmapTree>> {
-  return await dbGetRoadmapTrees()
+  const { trees } = await dbGetRoadmapTrees()
+  return trees
 }
 
 /** Get hierarchical roadmap tree for a specific goal from database (async). */

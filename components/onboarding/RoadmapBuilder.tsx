@@ -52,7 +52,10 @@ export default function RoadmapBuilder({
     const next = [...phases]
     const swap = idx + dir
     if (swap < 0 || swap >= next.length) return
-    ;[next[idx], next[swap]] = [next[swap], next[idx]]
+    const a = next[idx]
+    const b = next[swap]
+    if (a === undefined || b === undefined) return
+    ;[next[idx], next[swap]] = [b, a]
     onChange(next)
   }
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { getSessions } from "@/lib/storage";
+import { useMemo } from "react";
+import { useSessionsDb } from "@/lib/hooks/useDb";
 import type { Session } from "@/lib/types";
 import { formatHM } from "@/lib/utils";
 import { currentStreak, sessionsOnDate, sessionsThisWeek, totalDuration } from "@/lib/analytics";
@@ -14,16 +14,8 @@ interface Metric {
 }
 
 export default function MetricsBar() {
-  const [sessions, setSessions] = useState<Session[]>([]);
-
-  useEffect(() => {
-    function onStorage() {
-      setSessions(getSessions());
-    }
-    window.addEventListener("compass-storage-update", onStorage);
-    onStorage();
-    return () => window.removeEventListener("compass-storage-update", onStorage);
-  }, []);
+  const { data: sessionsData, loading } = useSessionsDb();
+  const sessions = sessionsData ?? [];
 
   const now = new Date();
   const todaySessions = sessionsOnDate(sessions, now);

@@ -5,8 +5,8 @@
  * from the PostgreSQL `sessions` table.
  */
 
-import pool from "@/lib/db"
 import type { Session } from "@/lib/types"
+import { withDb } from "@/lib/db-utils"
 import { notifyDatabaseChange } from "@/lib/db-events"
 
 /**
@@ -14,8 +14,7 @@ import { notifyDatabaseChange } from "@/lib/db-events"
  * Returns the created session with its generated ID.
  */
 export async function createSession(input: Omit<Session, "id">): Promise<Session> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const result = await client.query(
       `INSERT INTO sessions (
         task_id, task_name, tags, duration, duration_formatted,
@@ -50,9 +49,7 @@ export async function createSession(input: Omit<Session, "id">): Promise<Session
       pomodoroCount: row.pomodoro_count,
       productivityRating: row.productivity_rating,
     }
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
@@ -60,8 +57,7 @@ export async function createSession(input: Omit<Session, "id">): Promise<Session
  * Returns null if not found.
  */
 export async function getSessionById(id: string): Promise<Session | null> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const result = await client.query(
       "SELECT * FROM sessions WHERE id = $1",
       [id]
@@ -83,9 +79,7 @@ export async function getSessionById(id: string): Promise<Session | null> {
       pomodoroCount: row.pomodoro_count,
       productivityRating: row.productivity_rating,
     }
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
@@ -96,8 +90,7 @@ export async function getAllSessions(options?: {
   limit?: number;
   offset?: number;
 }): Promise<{ sessions: Session[]; total: number }> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const limit = options?.limit || 50
     const offset = options?.offset || 0
     
@@ -126,17 +119,14 @@ export async function getAllSessions(options?: {
     }))
     
     return { sessions, total }
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Get sessions for a specific date.
  */
 export async function getSessionsByDate(date: string): Promise<Session[]> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const result = await client.query(
       "SELECT * FROM sessions WHERE date = $1 ORDER BY started_at DESC",
       [date]
@@ -155,17 +145,14 @@ export async function getSessionsByDate(date: string): Promise<Session[]> {
       pomodoroCount: row.pomodoro_count,
       productivityRating: row.productivity_rating,
     }))
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Get sessions within a date range (inclusive).
  */
 export async function getSessionsByDateRange(startDate: string, endDate: string): Promise<Session[]> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const result = await client.query(
       "SELECT * FROM sessions WHERE date >= $1 AND date <= $2 ORDER BY started_at DESC",
       [startDate, endDate]
@@ -184,17 +171,14 @@ export async function getSessionsByDateRange(startDate: string, endDate: string)
       pomodoroCount: row.pomodoro_count,
       productivityRating: row.productivity_rating,
     }))
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Get sessions that contain specific tags.
  */
 export async function getSessionsByTags(tags: string[]): Promise<Session[]> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     // Use PostgreSQL array overlap operator &&
     const result = await client.query(
       "SELECT * FROM sessions WHERE tags && $1 ORDER BY started_at DESC",
@@ -214,24 +198,19 @@ export async function getSessionsByTags(tags: string[]): Promise<Session[]> {
       pomodoroCount: row.pomodoro_count,
       productivityRating: row.productivity_rating,
     }))
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Update a session's productivity rating.
  */
 export async function updateSessionRating(id: string, rating: number): Promise<void> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     await client.query(
       "UPDATE sessions SET productivity_rating = $1 WHERE id = $2",
       [rating, id]
     )
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
@@ -239,8 +218,7 @@ export async function updateSessionRating(id: string, rating: number): Promise<v
  * Also cleans up any linked task reference.
  */
 export async function deleteSession(id: string): Promise<void> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     // Get the session first to find linked task
     const sessionResult = await client.query(
       "SELECT task_id FROM sessions WHERE id = $1",
@@ -261,46 +239,35 @@ export async function deleteSession(id: string): Promise<void> {
         [taskId, id]
       )
     }
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Delete all sessions (used for data reset).
  */
 export async function deleteAllSessions(): Promise<void> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     await client.query("DELETE FROM sessions")
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Get session count for analytics.
  */
 export async function getSessionCount(): Promise<number> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const result = await client.query("SELECT COUNT(*) as count FROM sessions")
     return parseInt(result.rows[0].count, 10)
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Get total focus time (sum of all session durations) in seconds.
  */
 export async function getTotalFocusTime(): Promise<number> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const result = await client.query("SELECT COALESCE(SUM(duration), 0) as total FROM sessions")
-    return parseInt(result.rows[0].total, 10)
-  } finally {
     notifyDatabaseChange()
-    client.release()
-  }
+    return parseInt(result.rows[0].total, 10)
+  })
 }

@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DialogTitle } from "@/components/ui/dialog";
 import type { Goal, WeeklyObjective } from "@/lib/types";
 import { ObjectiveCard } from "./ObjectiveCard";
-import { GOAL_COLOR_RECORD } from "@/lib/constants";
+import { getGoalColor } from "@/lib/constants";
 
 interface WizardStep2Props {
   goals: Goal[];
@@ -54,7 +54,7 @@ export const WizardStep2 = React.memo(function WizardStep2({
 
   if (!focusedGoal) return null;
 
-  const color = GOAL_COLOR_RECORD[focusedGoal.color as keyof typeof GOAL_COLOR_RECORD] || GOAL_COLOR_RECORD.Purple;
+  const color = getGoalColor(focusedGoal.color);
 
   return (
     <div className="flex flex-col">
@@ -80,7 +80,7 @@ export const WizardStep2 = React.memo(function WizardStep2({
         {goals.length > 1 && (
           <div className="mt-3 flex gap-1.5 flex-wrap">
             {goals.map((g) => {
-              const c = GOAL_COLOR_RECORD[g.color as keyof typeof GOAL_COLOR_RECORD] || GOAL_COLOR_RECORD.Purple;
+              const c = getGoalColor(g.color);
               const active = g.id === focusedGoal.id;
               const count = objectives.filter((o) => o.goalId === g.id).length;
               return (

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Map, ArrowRight } from "lucide-react"
-import { getRoadmaps, setRoadmaps, cleanOrphanedRoadmaps, dispatchStorageEvent } from "@/lib/storage"
+import { fetchRoadmapPhases, saveRoadmapPhases } from "@/lib/db-client"
 import type { Goal, Phase, RoadmapMap } from "@/lib/types"
 import RoadmapBuilder from "./RoadmapBuilder"
 
@@ -17,28 +17,41 @@ export default function StepRoadmap({
   onBack: () => void
 }) {
   const [roadmapMap, setRoadmapMap] = useState<RoadmapMap>(() => {
-    const existing = getRoadmaps()
     const map: RoadmapMap = {}
     for (const g of goals) {
-      map[g.id] = existing[g.id] ?? []
+      map[g.id] = []
     }
     return map
+  })
+  const [loaded, setLoaded] = useState(false)
+
+  // Load existing roadmaps on mount (async via API)
+  useState(() => {
+    (async () => {
+      try {
+        const map: RoadmapMap = {}
+        for (const g of goals) {
+          const phases = await fetchRoadmapPhases(g.id)
+          map[g.id] = phases
+        }
+        setRoadmapMap(map)
+      } catch (e) {
+        console.error("Failed to load roadmaps:", e)
+      } finally {
+        setLoaded(true)
+      }
+    })()
   })
 
   function updateGoalPhases(goalId: string, phases: Phase[]) {
     setRoadmapMap(m => ({ ...m, [goalId]: phases }))
   }
 
-  function saveAndContinue() {
+  async function saveAndContinue() {
     try {
-      const existing = getRoadmaps()
-      const merged = { ...existing, ...roadmapMap }
-      setRoadmaps(merged)
-
-      const allGoalIds = [...new Set([...Object.keys(existing), ...goals.map(g => g.id)])]
-      cleanOrphanedRoadmaps(allGoalIds)
-
-      dispatchStorageEvent()
+      for (const [goalId, phases] of Object.entries(roadmapMap)) {
+        await saveRoadmapPhases(goalId, phases)
+      }
     } catch (e) {
       console.error("Failed to save roadmaps:", e)
     }

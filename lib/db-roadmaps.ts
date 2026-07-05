@@ -1,494 +1,277 @@
 /**
  * Database persistence layer for roadmaps.
- * 
- * This module provides async functions for both:
- * 1. Legacy flat roadmap phases (roadmap_phases table)
- * 2. Hierarchical roadmap nodes (roadmap_nodes table)
+ *
+ * Supports both legacy flat phases and hierarchical roadmap nodes,
+ * using the {@link withDb} / {@link withTransaction} helpers to
+ * eliminate connection boilerplate.
  */
 
-import pool from "@/lib/db"
 import type { Phase, RoadmapNode, RoadmapTree, RoadmapMap } from "@/lib/types"
+import { withDb, withTransaction } from "@/lib/db-utils"
 import { notifyDatabaseChange } from "@/lib/db-events"
 
-// ============================================================================
+// ── Row mappers ──────────────────────────────────────────────────────────────
+
+function phaseFromRow(row: Record<string, unknown>): Phase {
+  return { id: row.id as string, name: row.name as string, done: row.done as boolean }
+}
+
+function nodeFromRow(row: Record<string, unknown>): RoadmapNode {
+  return {
+    id: row.id as string,
+    type: row.type as RoadmapNode["type"],
+    name: row.name as string,
+    description: row.description as string,
+    goalId: row.goal_id as string,
+    parentId: row.parent_id as string | null,
+    children: [],
+    status: row.status as RoadmapNode["status"],
+    order: row.order_index as number,
+    createdAt: row.created_at as string,
+  }
+}
+
+function populateChildren(tree: RoadmapTree): void {
+  Object.values(tree).forEach((node) => {
+    if (node.parentId) {
+      const parent = tree[node.parentId]
+      if (parent) parent.children.push(node.id)
+    }
+  })
+}
+
+async function getNodeChildren(client: import("pg").PoolClient, nodeId: string): Promise<string[]> {
+  const { rows } = await client.query(
+    "SELECT id FROM roadmap_nodes WHERE parent_id = $1 ORDER BY order_index",
+    [nodeId],
+  )
+  return rows.map((r: Record<string, unknown>) => r.id as string)
+}
+
+// =============================================================================
 // LEGACY FLAT ROADMAP PHASES
-// ============================================================================
+// =============================================================================
 
-/**
- * Get legacy roadmap phases for a specific goal.
- */
+/** Get legacy roadmap phases for a specific goal. */
 export async function getRoadmapForGoal(goalId: string): Promise<Phase[]> {
-  const client = await pool.connect()
-  try {
-    const result = await client.query(
+  return withDb(async (client) => {
+    const { rows } = await client.query(
       "SELECT * FROM roadmap_phases WHERE goal_id = $1 ORDER BY order_index",
-      [goalId]
+      [goalId],
     )
-    
-    return result.rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      done: row.done,
-    }))
-  } finally {
-    client.release()
-  }
+    return rows.map(phaseFromRow)
+  })
 }
 
-/**
- * Get all legacy roadmap phases for all goals.
- * Returns a map: goalId -> Phase[]
- * Supports pagination with limit and offset.
- */
+/** Get all legacy roadmaps, paginated. */
 export async function getRoadmaps(options?: {
-  limit?: number;
-  offset?: number;
+  limit?: number
+  offset?: number
 }): Promise<{ roadmaps: RoadmapMap; total: number }> {
-  const client = await pool.connect()
-  try {
-    const limit = options?.limit || 200
-    const offset = options?.offset || 0
-    
-    // Get total count
-    const countResult = await client.query("SELECT COUNT(*) as count FROM roadmap_phases")
-    const total = parseInt(countResult.rows[0].count, 10)
-    
-    // Get paginated roadmap phases
-    const result = await client.query(
+  return withDb(async (client) => {
+    const limit = options?.limit ?? 200
+    const offset = options?.offset ?? 0
+
+    const { rows: countRows } = await client.query("SELECT COUNT(*) AS count FROM roadmap_phases")
+    const total = parseInt(countRows[0].count as string, 10)
+
+    const { rows } = await client.query(
       "SELECT * FROM roadmap_phases ORDER BY goal_id, order_index LIMIT $1 OFFSET $2",
-      [limit, offset]
+      [limit, offset],
     )
-    
+
     const roadmapMap: RoadmapMap = {}
-    result.rows.forEach((row) => {
-      if (!roadmapMap[row.goal_id]) {
-        roadmapMap[row.goal_id] = []
-      }
-      roadmapMap[row.goal_id].push({
-        id: row.id,
-        name: row.name,
-        done: row.done,
-      })
-    })
-    
+    for (const row of rows) {
+      const gid = row.goal_id as string
+      if (!roadmapMap[gid]) roadmapMap[gid] = []
+      roadmapMap[gid].push(phaseFromRow(row))
+    }
     return { roadmaps: roadmapMap, total }
-  } finally {
-    client.release()
-  }
+  })
 }
 
-/**
- * Save/replace legacy roadmap phases for a goal.
- * This removes all existing phases and creates new ones.
- * Note: Uses database-generated UUIDs, ignores phase.id from input.
- */
+/** Replace legacy roadmap phases for a goal (delete-all + insert). */
 export async function saveRoadmapForGoal(goalId: string, phases: Phase[]): Promise<void> {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    
-    // Delete existing phases
+  return withTransaction(async (client) => {
     await client.query("DELETE FROM roadmap_phases WHERE goal_id = $1", [goalId])
-    
-    // Insert new phases with database-generated UUIDs
     for (let i = 0; i < phases.length; i++) {
       await client.query(
-        `INSERT INTO roadmap_phases (goal_id, name, done, order_index)
-         VALUES ($1, $2, $3, $4)`,
-        [goalId, phases[i].name, phases[i].done, i]
+        "INSERT INTO roadmap_phases (goal_id, name, done, order_index) VALUES ($1, $2, $3, $4)",
+        [goalId, phases[i]!.name, phases[i]!.done, i],
       )
     }
-    
-    await client.query("COMMIT")
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
+  })
 }
 
-/**
- * Delete all legacy roadmap phases for a goal.
- */
+/** Delete all legacy roadmap phases for a goal. */
 export async function deleteRoadmapForGoal(goalId: string): Promise<void> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     await client.query("DELETE FROM roadmap_phases WHERE goal_id = $1", [goalId])
-  } finally {
-    client.release()
-  }
+  })
 }
 
-/**
- * Delete all legacy roadmap phases (for testing/cleanup).
- */
+/** Delete ALL legacy roadmap phases (testing / cleanup). */
 export async function deleteAllRoadmapPhases(): Promise<void> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     await client.query("DELETE FROM roadmap_phases")
-  } finally {
-    client.release()
-  }
+  })
 }
 
-// ============================================================================
+// =============================================================================
 // HIERARCHICAL ROADMAP NODES
-// ============================================================================
+// =============================================================================
 
-/**
- * Get hierarchical roadmap tree for a specific goal.
- * Returns a flat Record<ID, RoadmapNode> structure.
- */
+/** Get the hierarchical roadmap tree for a goal (flat Record<ID, RoadmapNode>). */
 export async function getRoadmapTree(goalId: string): Promise<RoadmapTree> {
-  const client = await pool.connect()
-  try {
-    const result = await client.query(
+  return withDb(async (client) => {
+    const { rows } = await client.query(
       "SELECT * FROM roadmap_nodes WHERE goal_id = $1 ORDER BY order_index",
-      [goalId]
+      [goalId],
     )
-    
     const tree: RoadmapTree = {}
-    result.rows.forEach((row) => {
-      tree[row.id] = {
-        id: row.id,
-        type: row.type,
-        name: row.name,
-        description: row.description,
-        goalId: row.goal_id,
-        parentId: row.parent_id,
-        children: [], // Will be populated below
-        status: row.status,
-        order: row.order_index,
-        createdAt: row.created_at,
-      }
-    })
-    
-    // Build children arrays
-    Object.values(tree).forEach((node) => {
-      if (node.parentId && tree[node.parentId]) {
-        tree[node.parentId].children.push(node.id)
-      }
-    })
-    
+    for (const row of rows) tree[row.id as string] = nodeFromRow(row)
+    populateChildren(tree)
     return tree
-  } finally {
-    client.release()
-  }
+  })
 }
 
-/**
- * Get all hierarchical roadmap trees for all goals.
- * Returns a map: goalId -> RoadmapTree
- * Supports pagination with limit and offset.
- */
+/** Get all roadmap trees for all goals, paginated. */
 export async function getRoadmapTrees(options?: {
-  limit?: number;
-  offset?: number;
+  limit?: number
+  offset?: number
 }): Promise<{ trees: Record<string, RoadmapTree>; total: number }> {
-  const client = await pool.connect()
-  try {
-    const limit = options?.limit || 200
-    const offset = options?.offset || 0
-    
-    // Get total count
-    const countResult = await client.query("SELECT COUNT(*) as count FROM roadmap_nodes")
-    const total = parseInt(countResult.rows[0].count, 10)
-    
-    // Get paginated roadmap nodes
-    const result = await client.query(
+  return withDb(async (client) => {
+    const limit = options?.limit ?? 200
+    const offset = options?.offset ?? 0
+
+    const { rows: countRows } = await client.query("SELECT COUNT(*) AS count FROM roadmap_nodes")
+    const total = parseInt(countRows[0].count as string, 10)
+
+    const { rows } = await client.query(
       "SELECT * FROM roadmap_nodes ORDER BY goal_id, order_index LIMIT $1 OFFSET $2",
-      [limit, offset]
+      [limit, offset],
     )
-    
+
     const treesMap: Record<string, RoadmapTree> = {}
-    
-    result.rows.forEach((row) => {
-      if (!treesMap[row.goal_id]) {
-        treesMap[row.goal_id] = {}
-      }
-      treesMap[row.goal_id][row.id] = {
-        id: row.id,
-        type: row.type,
-        name: row.name,
-        description: row.description,
-        goalId: row.goal_id,
-        parentId: row.parent_id,
-        children: [], // Will be populated below
-        status: row.status,
-        order: row.order_index,
-        createdAt: row.created_at,
-      }
-    })
-    
-    // Build children arrays for each tree
-    Object.values(treesMap).forEach((tree) => {
-      Object.values(tree).forEach((node) => {
-        if (node.parentId && tree[node.parentId]) {
-          tree[node.parentId].children.push(node.id)
-        }
-      })
-    })
-    
+    for (const row of rows) {
+      const gid = row.goal_id as string
+      if (!treesMap[gid]) treesMap[gid] = {}
+      treesMap[gid][row.id as string] = nodeFromRow(row)
+    }
+    Object.values(treesMap).forEach(populateChildren)
     return { trees: treesMap, total }
-  } finally {
-    client.release()
-  }
+  })
 }
 
-/**
- * Save/replace entire roadmap tree for a goal.
- * This removes all existing nodes and creates new ones.
- */
+/** Replace the entire roadmap tree for a goal. */
 export async function saveRoadmapTree(goalId: string, tree: RoadmapTree): Promise<void> {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    
-    // Delete existing nodes
+  return withTransaction(async (client) => {
     await client.query("DELETE FROM roadmap_nodes WHERE goal_id = $1", [goalId])
-    
-    // Insert new nodes
     const nodes = Object.values(tree)
     for (const node of nodes) {
       await client.query(
-        `INSERT INTO roadmap_nodes (
-          id, type, name, description, goal_id, parent_id, status, order_index, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          node.id,
-          node.type,
-          node.name,
-          node.description,
-          node.goalId,
-          node.parentId,
-          node.status,
-          node.order,
-          node.createdAt,
-        ]
+        `INSERT INTO roadmap_nodes (id, type, name, description, goal_id, parent_id, status, order_index, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [node.id, node.type, node.name, node.description, node.goalId, node.parentId, node.status, node.order, node.createdAt],
       )
     }
-    
-    await client.query("COMMIT")
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
+  })
 }
 
-/**
- * Add a single roadmap node.
- * Returns the created node with generated ID.
- */
+/** Add a single roadmap node. */
 export async function addRoadmapNode(
   goalId: string,
-  node: Omit<RoadmapNode, "id" | "createdAt">
+  node: Omit<RoadmapNode, "id" | "createdAt">,
 ): Promise<RoadmapNode> {
-  const client = await pool.connect()
-  try {
-    const result = await client.query(
-      `INSERT INTO roadmap_nodes (
-        type, name, description, goal_id, parent_id, status, order_index
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING *`,
-      [
-        node.type,
-        node.name,
-        node.description,
-        goalId,
-        node.parentId,
-        node.status,
-        node.order,
-      ]
+  return withDb(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO roadmap_nodes (type, name, description, goal_id, parent_id, status, order_index)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [node.type, node.name, node.description, goalId, node.parentId, node.status, node.order],
     )
-    
-    const row = result.rows[0]
-    return {
-      id: row.id,
-      type: row.type,
-      name: row.name,
-      description: row.description,
-      goalId: row.goal_id,
-      parentId: row.parent_id,
-      children: [], // No children yet
-      status: row.status,
-      order: row.order_index,
-      createdAt: row.created_at,
-    }
-  } finally {
-    client.release()
-  }
+    return nodeFromRow(rows[0])
+  })
 }
 
-/**
- * Update a roadmap node.
- */
+/** Update a roadmap node. */
 export async function updateRoadmapNode(
   nodeId: string,
-  updates: Partial<Omit<RoadmapNode, "id" | "goalId" | "children" | "createdAt">>
+  updates: Partial<Omit<RoadmapNode, "id" | "goalId" | "children" | "createdAt">>,
 ): Promise<RoadmapNode> {
-  const client = await pool.connect()
-  try {
-    const fields: string[] = []
-    const values: any[] = []
-    let paramIndex = 1
-
-    if (updates.type !== undefined) {
-      fields.push(`type = $${paramIndex++}`)
-      values.push(updates.type)
-    }
-    if (updates.name !== undefined) {
-      fields.push(`name = $${paramIndex++}`)
-      values.push(updates.name)
-    }
-    if (updates.description !== undefined) {
-      fields.push(`description = $${paramIndex++}`)
-      values.push(updates.description)
-    }
-    if (updates.parentId !== undefined) {
-      fields.push(`parent_id = $${paramIndex++}`)
-      values.push(updates.parentId)
-    }
-    if (updates.status !== undefined) {
-      fields.push(`status = $${paramIndex++}`)
-      values.push(updates.status)
-    }
-    if (updates.order !== undefined) {
-      fields.push(`order_index = $${paramIndex++}`)
-      values.push(updates.order)
+  return withDb(async (client) => {
+    const fieldMap: Record<string, keyof typeof updates> = {
+      type: "type",
+      name: "name",
+      description: "description",
+      parent_id: "parentId",
+      status: "status",
+      order_index: "order",
     }
 
-    if (fields.length === 0) {
-      throw new Error("No updates provided")
+    const setClauses: string[] = []
+    const values: unknown[] = []
+    let idx = 1
+
+    for (const [col, key] of Object.entries(fieldMap)) {
+      if (updates[key] !== undefined) {
+        setClauses.push(`${col} = $${idx++}`)
+        values.push(updates[key])
+      }
     }
+    if (setClauses.length === 0) throw new Error("No updates provided")
 
     values.push(nodeId)
-    const result = await client.query(
-      `UPDATE roadmap_nodes SET ${fields.join(", ")} WHERE id = $${paramIndex} RETURNING *`,
-      values
+    const { rows } = await client.query(
+      `UPDATE roadmap_nodes SET ${setClauses.join(", ")} WHERE id = $${idx} RETURNING *`,
+      values,
     )
+    if (rows.length === 0) throw new Error(`Roadmap node ${nodeId} not found`)
 
-    if (result.rows.length === 0) {
-      throw new Error(`Roadmap node ${nodeId} not found`)
-    }
-
-    const row = result.rows[0]
-    
-    // Get children IDs
-    const childrenResult = await client.query(
-      "SELECT id FROM roadmap_nodes WHERE parent_id = $1 ORDER BY order_index",
-      [nodeId]
-    )
-
-    return {
-      id: row.id,
-      type: row.type,
-      name: row.name,
-      description: row.description,
-      goalId: row.goal_id,
-      parentId: row.parent_id,
-      children: childrenResult.rows.map((r) => r.id),
-      status: row.status,
-      order: row.order_index,
-      createdAt: row.created_at,
-    }
-  } finally {
-    client.release()
-  }
+    const node = nodeFromRow(rows[0])
+    node.children = await getNodeChildren(client, nodeId)
+    return node
+  })
 }
 
-/**
- * Delete a roadmap node and all its descendants (recursive CASCADE).
- */
+/** Delete a node (CASCADE handles descendants). */
 export async function deleteRoadmapNode(nodeId: string): Promise<void> {
-  const client = await pool.connect()
-  try {
-    // CASCADE DELETE in schema will handle descendants
+  return withDb(async (client) => {
     await client.query("DELETE FROM roadmap_nodes WHERE id = $1", [nodeId])
-  } finally {
-    client.release()
-  }
+  })
 }
 
-/**
- * Delete entire roadmap tree for a goal.
- */
+/** Delete the entire roadmap tree for a goal. */
 export async function deleteRoadmapTree(goalId: string): Promise<void> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     await client.query("DELETE FROM roadmap_nodes WHERE goal_id = $1", [goalId])
-  } finally {
-    client.release()
-  }
+  })
 }
 
-/**
- * Delete all roadmap nodes (for testing/cleanup).
- */
+/** Delete ALL roadmap nodes (testing / cleanup). */
 export async function deleteAllRoadmapNodes(): Promise<void> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     await client.query("DELETE FROM roadmap_nodes")
-  } finally {
-    client.release()
-  }
+  })
 }
 
-/**
- * Get a single roadmap node by ID (with children IDs populated).
- */
+/** Get a single roadmap node by ID (with children populated). */
 export async function getRoadmapNodeById(nodeId: string): Promise<RoadmapNode | null> {
-  const client = await pool.connect()
-  try {
-    const result = await client.query(
-      "SELECT * FROM roadmap_nodes WHERE id = $1",
-      [nodeId]
-    )
-    
-    if (result.rows.length === 0) {
-      return null
-    }
-    
-    const row = result.rows[0]
-    
-    // Get children IDs
-    const childrenResult = await client.query(
-      "SELECT id FROM roadmap_nodes WHERE parent_id = $1 ORDER BY order_index",
-      [nodeId]
-    )
-    
-    return {
-      id: row.id,
-      type: row.type,
-      name: row.name,
-      description: row.description,
-      goalId: row.goal_id,
-      parentId: row.parent_id,
-      children: childrenResult.rows.map((r) => r.id),
-      status: row.status,
-      order: row.order_index,
-      createdAt: row.created_at,
-    }
-  } finally {
-    client.release()
-  }
+  return withDb(async (client) => {
+    const { rows } = await client.query("SELECT * FROM roadmap_nodes WHERE id = $1", [nodeId])
+    if (rows.length === 0) return null
+    const node = nodeFromRow(rows[0])
+    node.children = await getNodeChildren(client, nodeId)
+    return node
+  })
 }
 
-/**
- * Get roadmap node count for a goal.
- */
+/** Get roadmap node count for a goal. */
 export async function getRoadmapNodeCount(goalId: string): Promise<number> {
-  const client = await pool.connect()
-  try {
-    const result = await client.query(
-      "SELECT COUNT(*) as count FROM roadmap_nodes WHERE goal_id = $1",
-      [goalId]
+  return withDb(async (client) => {
+    const { rows } = await client.query(
+      "SELECT COUNT(*) AS count FROM roadmap_nodes WHERE goal_id = $1",
+      [goalId],
     )
-    return parseInt(result.rows[0].count, 10)
-  } finally {
-    notifyDatabaseChange()
-    client.release()
-  }
+    return parseInt(rows[0].count as string, 10)
+  })
 }

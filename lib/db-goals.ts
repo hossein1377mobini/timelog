@@ -5,8 +5,8 @@
  * from the PostgreSQL `goals` table.
  */
 
-import pool from "@/lib/db"
 import type { Goal } from "@/lib/types"
+import { withDb } from "@/lib/db-utils"
 import { notifyDatabaseChange } from "@/lib/db-events"
 
 /**
@@ -14,8 +14,7 @@ import { notifyDatabaseChange } from "@/lib/db-events"
  * Returns the created goal with its generated ID.
  */
 export async function createGoal(input: Omit<Goal, "id" | "createdAt" | "updatedAt" | "roadmap">): Promise<Goal> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const result = await client.query(
       `INSERT INTO goals (
         name, description, category, tag, target_hours, target_date, weekly_target,
@@ -53,17 +52,14 @@ export async function createGoal(input: Omit<Goal, "id" | "createdAt" | "updated
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Get a goal by ID.
  */
 export async function getGoalById(id: string): Promise<Goal | null> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const result = await client.query(
       "SELECT * FROM goals WHERE id = $1",
       [id]
@@ -90,9 +86,7 @@ export async function getGoalById(id: string): Promise<Goal | null> {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
@@ -105,8 +99,7 @@ export async function getAllGoals(options?: {
   limit?: number;
   offset?: number;
 }): Promise<{ goals: Goal[]; total: number }> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const limit = options?.limit || 50
     const offset = options?.offset || 0
     const statusFilter = options?.statusFilter
@@ -151,17 +144,14 @@ export async function getAllGoals(options?: {
     }))
     
     return { goals, total }
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Get goals by category.
  */
 export async function getGoalsByCategory(category: string): Promise<Goal[]> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const result = await client.query(
       "SELECT * FROM goals WHERE category = $1 ORDER BY created_at DESC",
       [category]
@@ -183,17 +173,14 @@ export async function getGoalsByCategory(category: string): Promise<Goal[]> {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }))
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Get goals by status.
  */
 export async function getGoalsByStatus(status: string): Promise<Goal[]> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const result = await client.query(
       "SELECT * FROM goals WHERE status = $1 ORDER BY created_at DESC",
       [status]
@@ -215,9 +202,7 @@ export async function getGoalsByStatus(status: string): Promise<Goal[]> {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }))
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
@@ -225,8 +210,7 @@ export async function getGoalsByStatus(status: string): Promise<Goal[]> {
  * Returns the updated goal.
  */
 export async function updateGoal(id: string, updates: Partial<Omit<Goal, "id" | "createdAt" | "updatedAt" | "roadmap">>): Promise<Goal> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     // Build dynamic update query
     const setClauses: string[] = []
     const values: any[] = []
@@ -309,9 +293,7 @@ export async function updateGoal(id: string, updates: Partial<Omit<Goal, "id" | 
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
@@ -319,22 +301,18 @@ export async function updateGoal(id: string, updates: Partial<Omit<Goal, "id" | 
  * CASCADE DELETE: Also deletes all related weekly_objectives, tasks, roadmap_phases, and roadmap_nodes.
  */
 export async function deleteGoal(id: string): Promise<void> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     // The database schema has CASCADE DELETE constraints, so this will automatically
     // delete related records in weekly_objectives, tasks, roadmap_phases, and roadmap_nodes
     await client.query("DELETE FROM goals WHERE id = $1", [id])
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Get goal count for analytics.
  */
 export async function getGoalCount(statusFilter?: string): Promise<number> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     let query = "SELECT COUNT(*) as count FROM goals"
     const params: any[] = []
     
@@ -345,17 +323,14 @@ export async function getGoalCount(statusFilter?: string): Promise<number> {
     
     const result = await client.query(query, params)
     return parseInt(result.rows[0].count, 10)
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Get goal count by status for analytics.
  */
 export async function getGoalCountByStatus(): Promise<Record<string, number>> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const result = await client.query(
       "SELECT status, COUNT(*) as count FROM goals GROUP BY status"
     )
@@ -365,20 +340,15 @@ export async function getGoalCountByStatus(): Promise<Record<string, number>> {
       counts[row.status] = parseInt(row.count, 10)
     })
     return counts
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
  * Delete all goals (used for testing/data reset).
  */
 export async function deleteAllGoals(): Promise<void> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     await client.query("DELETE FROM goals")
-  } finally {
     notifyDatabaseChange()
-    client.release()
-  }
+  })
 }

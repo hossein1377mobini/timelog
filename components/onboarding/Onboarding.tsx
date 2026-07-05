@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getGoals } from "@/lib/storage"
+import { fetchGoals } from "@/lib/db-client"
 import type { Goal } from "@/lib/types"
 import StepGoals from "./StepGoals"
 import StepRoadmap from "./StepRoadmap"
@@ -20,7 +20,7 @@ export default function Onboarding({ onComplete }: Props) {
   const [goals, setGoals] = useState<Goal[]>([])
 
   useEffect(() => {
-    setGoals(getGoals())
+    fetchGoals().then(setGoals).catch(console.error)
   }, [])
 
   return (

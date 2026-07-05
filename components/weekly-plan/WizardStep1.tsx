@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { DialogTitle } from "@/components/ui/dialog";
 import type { Goal } from "@/lib/types";
 import { weekLabel } from "@/lib/utils";
-import { GOAL_COLOR_RECORD } from "@/lib/constants";
+import { getGoalColor } from "@/lib/constants";
 
 interface WizardStep1Props {
   goals: Goal[];
@@ -58,7 +58,7 @@ export const WizardStep1 = React.memo(function WizardStep1({
           </p>
         ) : (
           activeGoals.map((goal) => {
-            const color = GOAL_COLOR_RECORD[goal.color as keyof typeof GOAL_COLOR_RECORD] || GOAL_COLOR_RECORD.Purple;
+            const color = getGoalColor(goal.color);
             const selected = selectedGoalIds.includes(goal.id);
             return (
               <div key={goal.id} className="space-y-1.5">

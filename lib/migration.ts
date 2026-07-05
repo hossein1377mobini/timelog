@@ -138,12 +138,12 @@ function migrateGoals(): boolean {
 /** Migrate sessions from v0 (numeric timestamps, no taskId) to v1 schema. */
 function migrateSessions(): boolean {
   const raw = localStorage.getItem("compass_sessions")
-  if (!raw) return false
-  const existing = getSessions()
-  if (existing.length > 0 && "taskId" in existing[0]) return false
+    if (!raw) return false
+    const existing = getSessions()
+    if (existing.length > 0 && existing[0] && "taskId" in existing[0]) return false
 
-  const old: OldSession[] = safeParse<OldSession[]>(raw, [])
-  if (old.length === 0) return false
+    const old: OldSession[] = safeParse<OldSession[]>(raw, [])
+    if (old.length === 0) return false
 
   const migrated: Session[] = old.map((o) => {
     const started = new Date(o.startedAt)
@@ -172,7 +172,7 @@ function migrateInterruptions(): boolean {
   const raw = localStorage.getItem("compass_interruptions")
   if (!raw) return false
   const existing = getInterruptions()
-  if (existing.length > 0 && "severity" in existing[0]) return false
+  if (existing.length > 0 && existing[0] && "severity" in existing[0]) return false
 
   const old: OldInterruption[] = safeParse<OldInterruption[]>(raw, [])
   if (old.length === 0) return false

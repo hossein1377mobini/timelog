@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compass — Sprint 1 Board</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0a;color:#e5e5e5;font-family:system-ui,-apple-system,sans-serif;padding:24px}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;border-bottom:1px solid #1a1a1a;padding-bottom:16px}
+.header h1{font-size:22px;font-weight:600}
+.header .goal{font-size:13px;color:#888;margin-top:4px}
+.metrics{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.metric{background:#111;border-radius:8px;padding:8px 14px;font-size:12px;border:1px solid #1a1a1a}
+.metric .num{font-weight:600;color:#fff;font-size:15px}
+.legend{display:flex;gap:10px;margin-bottom:20px;font-size:12px;color:#888;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.epic{color:#f5a623}
+.done{color:#34d399}
+.blocked{color:#ef4444}
+.in-progress{color:#3b82f6}
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.column{background:#0d0d0d;border-radius:10px;border:1px solid #1a1a1a;padding:10px;min-height:200px}
+.column-header{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#666;margin-bottom:8px;display:flex;justify-content:space-between}
+.count{color:#444;font-size:11px}
+.card{background:#141414;border:1px solid #1f1f1f;border-radius:7px;padding:8px;margin-bottom:6px;font-size:12px}
+.card.epic{border-left:2px solid #f5a623}
+.card.done{opacity:0.55;border-left:2px solid #34d399}
+.card.blocked{border-left:2px solid #ef4444}
+.card.in-progress{border-left:2px solid #3b82f6}
+.card-id{font-size:10px;color:#555;font-weight:600}
+.card-title{font-size:12px;color:#ddd;margin:2px 0;font-weight:500}
+.card-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:10px}
+.badge-critical{background:#3b0f0f;color:#ef4444;padding:1px 5px;border-radius:3px;font-weight:600}
+.badge-high{background:#3b2f0f;color:#f5a623;padding:1px 5px;border-radius:3px;font-weight:600}
+.badge-medium{background:#1f2f1f;color:#34d399;padding:1px 5px;border-radius:3px;font-weight:600}
+.card-owner{color:#888}
+.card-pts{color:#666}
+@media(max-width:1000px){.board{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>🧭 Compass — Sprint 1</h1>
+    <div class="goal">Goal: Get running on PostgreSQL · 34 pts · 2026-07-05 → 2026-07-11</div>
+  </div>
+</div>
+<div class="legend">
+  <span><span class="dot epic"></span>Epic</span>
+  <span><span class="dot in-progress"></span>In Progress</span>
+  <span><span class="dot done"></span>Done</span>
+</div>
+<div class="metrics">
+  <div class="metric">TOTAL <span class="num" id="total">0</span></div>
+  <div class="metric">DONE <span class="num" id="done">0</span></div>
+  <div class="metric">IN PROG <span class="num" id="inprog">0</span></div>
+  <div class="metric">PTS DONE <span class="num" id="pts">0</span></div>
+</div>
+<div class="board" id="board"></div>
+<script>
+const DATA = {
+  "In Progress": [],
+  "Ready": [
+    {id:"T-2.3",title:"Fix onboarding — client-side DB check",pri:"critical",pts:2,owner:"Frontend"},
+    {id:"T-1.3",title:"DB init script on npm run dev",pri:"high",pts:2,owner:"Backend"},
+    {id:"EPIC-4",title:"Epic: Migrate Timer & Sessions to DB",pri:"high",epic:true},
+    {id:"T-4.1",title:"Convert useTimer hook to DB layer",pri:"high",pts:3,owner:"Frontend"},
+    {id:"T-4.2",title:"Convert TimerCard.tsx to DB hooks",pri:"high",pts:1,owner:"Frontend"},
+    {id:"T-4.3",title:"Convert SessionHistory.tsx to DB hooks",pri:"medium",pts:1,owner:"Frontend"},
+    {id:"T-4.4",title:"Convert MetricsBar.tsx to DB hooks",pri:"medium",pts:1,owner:"Frontend"},
+    {id:"T-4.5",title:"Convert CalendarHeatmap.tsx to DB hooks",pri:"medium",pts:1,owner:"Frontend"},
+    {id:"T-4.6",title:"Convert WeeklyReport.tsx to DB hooks",pri:"medium",pts:1,owner:"Frontend"},
+    {id:"T-4.7",title:"Convert FocusMode + useFocusTimer to DB",pri:"medium",pts:2,owner:"Frontend"},
+    {id:"T-4.8",title:"Convert HabitTracker.tsx to DB hooks",pri:"medium",pts:1,owner:"Frontend"},
+    {id:"T-3.4",title:"Unified StorageContext provider",pri:"high",pts:3,owner:"Frontend"},
+    {id:"EPIC-5",title:"Epic: QA & Verification",pri:"high",epic:true},
+    {id:"T-5.2",title:"Test timer create/stop/save round-trip",pri:"high",pts:1,owner:"QA"},
+    {id:"T-5.3",title:"Test session history CRUD",pri:"medium",pts:1,owner:"QA"},
+    {id:"T-5.4",title:"Test focus mode + interruptions",pri:"medium",pts:1,owner:"QA"},
+    {id:"T-5.5",title:"Update README + architecture docs",pri:"medium",pts:1,owner:"Docs"}
+  ],
+  "Done": [
+    {id:"EPIC-1",title:"Epic: PostgreSQL Infrastructure",pri:"critical",epic:true},
+    {id:"T-1.1",title:"Install PostgreSQL via Chocolatey",pri:"critical",pts:2,owner:"DevOps"},
+    {id:"T-1.2",title:"Create compass DB, user, apply schema",pri:"critical",pts:2,owner:"DevOps"},
+    {id:"T-1.4",title:"Add .env.example with all vars",pri:"medium",pts:1,owner:"DevOps"},
+    {id:"EPIC-2",title:"Epic: Fix Build & Runtime Crashes",pri:"critical",epic:true},
+    {id:"T-2.1",title:"Fix TS error in migration.ts:143",pri:"critical",pts:1,owner:"Backend"},
+    {id:"T-2.2",title:"Fix page.tsx — stop calling throwing action",pri:"critical",pts:2,owner:"Frontend"},
+    {id:"T-2.4",title:"Error boundaries for DB connection failures",pri:"high",pts:2,owner:"Frontend"},
+    {id:"EPIC-3",title:"Epic: Data Layer — DB Hooks",pri:"high",epic:true},
+    {id:"T-3.1",title:"Hooks: useSessionsDb, useGoalsDb, useTasksDb",pri:"high",pts:5,owner:"Backend"},
+    {id:"T-3.2",title:"Hooks: useInterruptionsDb, useReflectionsDb",pri:"high",pts:3,owner:"Backend"},
+    {id:"T-3.3",title:"Hooks: useWeeklyObjectivesDb, useRoadmapsDb",pri:"high",pts:3,owner:"Backend"},
+    {id:"T-3.5",title:"Data-fetching API routes (bridge)",pri:"high",pts:3,owner:"Backend"},
+    {id:"T-5.1",title:"Run full build — fix remaining TS errors",pri:"high",pts:2,owner:"Tech Lead"}
+  ]
+};
+const CLASSES={critical:"badge-critical",high:"badge-high",medium:"badge-medium"};
+const STATES=["Done","In Progress","Ready"];
+function render(){
+  const board=document.getElementById("board");
+  board.innerHTML="";
+  let total=0,done=0,inprog=0,pts=0;
+  STATES.forEach(state=>{
+    const col=document.createElement("div");
+    col.className="column";
+    const cards=DATA[state]||[];
+    col.innerHTML=`<div class="column-header">${state} <span class="count">${cards.length}</span></div>`;
+    const body=document.createElement("div");
+    cards.forEach(c=>{
+      if(!c.epic){total++;if(state==="Done"){done++;pts+=c.pts||0}if(state==="In Progress")inprog++}
+      const card=document.createElement("div");
+      let cls="card";
+      if(c.epic)cls+=" epic";
+      if(state==="Done")cls+=" done";
+      if(state==="In Progress")cls+=" in-progress";
+      card.className=cls;
+      const pri=c.pri?`<span class="${CLASSES[c.pri]}">${c.pri}</span>`:"";
+      const ptsHtml=c.epic?"":`<span class="card-pts">${c.pts}pts</span>`;
+      card.innerHTML=`<div class="card-id">${c.id}</div><div class="card-title">${c.title}</div><div class="card-meta">${pri}<span class="card-owner">${c.owner||""}</span>${ptsHtml}</div>`;
+      body.appendChild(card);
+    });
+    col.appendChild(body);
+    board.appendChild(col);
+  });
+  document.getElementById("total").textContent=total;
+  document.getElementById("done").textContent=done;
+  document.getElementById("inprog").textContent=inprog;
+  document.getElementById("pts").textContent=pts;
+}
+render();
+</script>
+</body>
+</html>

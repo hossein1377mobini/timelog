@@ -14,15 +14,16 @@ import {
 } from "@/components/ui/dialog";
 import { CalendarDays } from "lucide-react";
 import {
-  getGoals,
-  getSessions,
-  getObjectivesForWeek,
-  saveWeeklyObjective,
+  fetchGoals,
+  fetchWeeklyObjectives,
+  fetchSessions,
+  createWeeklyObjective,
   updateWeeklyObjective,
   deleteWeeklyObjective,
-  saveTask,
-  dispatchStorageEvent,
-} from "@/lib/storage";
+  createTask,
+  updateTask,
+  fetchTasks,
+} from "@/lib/db-client";
 import type { Goal, WeeklyObjective, Session, TaskStatus } from "@/lib/types";
 import { weekStartKey, weekEndKey, weekLabel, todayKey } from "@/lib/utils";
 import { buildLoggedByTag } from "./weekly-plan/weeklyPlanHelpers";
@@ -78,14 +79,21 @@ export default function WeeklyPlan() {
 
   useEffect(() => {
     loadData();
-    window.addEventListener("compass-storage-update", loadData);
-    return () => window.removeEventListener("compass-storage-update", loadData);
   }, []);
 
-  function loadData() {
-    setGoals(getGoals());
-    setObjectives(getObjectivesForWeek());
-    setSessions(getSessions());
+  async function loadData() {
+    try {
+      const [g, o, s] = await Promise.all([
+        fetchGoals(),
+        fetchWeeklyObjectives(weekKey),
+        fetchSessions(),
+      ]);
+      setGoals(g);
+      setObjectives(o);
+      setSessions(s);
+    } catch (e) {
+      console.error("Failed to load weekly plan data:", e);
+    }
   }
 
   // ── Derived data ─────────────────────────────────────────────────────────────
@@ -135,21 +143,20 @@ export default function WeeklyPlan() {
     setWizardStep(2);
   }
 
-  function closeWizard() {
+  async function closeWizard() {
     setWizardOpen(false);
     setAddingToGoalId(null);
     setNewObjTitle("");
     setNewObjDesc("");
-    loadData();
-    dispatchStorageEvent();
+    await loadData();
   }
 
   // ── Objective CRUD ────────────────────────────────────────────────────────────
 
-  function addObjective(goalId: string) {
+  async function addObjective(goalId: string) {
     const title = newObjTitle.trim();
     if (!title) return;
-    saveWeeklyObjective({
+    await createWeeklyObjective({
       goalId,
       title,
       description: newObjDesc.trim(),
@@ -162,20 +169,18 @@ export default function WeeklyPlan() {
     setNewObjTitle("");
     setNewObjDesc("");
     setAddingToGoalId(null);
-    loadData();
-    dispatchStorageEvent();
+    await loadData();
   }
 
-  function cycleStatus(obj: WeeklyObjective) {
+  async function cycleStatus(obj: WeeklyObjective) {
     const next: TaskStatus =
       obj.status === "pending"
         ? "in-progress"
         : obj.status === "in-progress"
           ? "completed"
           : "pending";
-    updateWeeklyObjective(obj.id, { status: next });
-    loadData();
-    dispatchStorageEvent();
+    await updateWeeklyObjective(obj.id, { status: next });
+    await loadData();
   }
 
   function openEdit(obj: WeeklyObjective) {
@@ -184,28 +189,26 @@ export default function WeeklyPlan() {
     setEditDesc(obj.description);
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!editingObj || !editTitle.trim()) return;
-    updateWeeklyObjective(editingObj.id, {
+    await updateWeeklyObjective(editingObj.id, {
       title: editTitle.trim(),
       description: editDesc.trim(),
     });
     setEditingObj(null);
-    loadData();
-    dispatchStorageEvent();
+    await loadData();
   }
 
-  function deleteObj(id: string) {
-    deleteWeeklyObjective(id);
-    loadData();
-    dispatchStorageEvent();
+  async function deleteObj(id: string) {
+    await deleteWeeklyObjective(id);
+    await loadData();
   }
 
   // ── Daily task quick-add ──────────────────────────────────────────────────────
 
-  function addDailyTask() {
+  async function addDailyTask() {
     if (!addTaskObj || !newTaskTitle.trim()) return;
-    const task = saveTask({
+    const task = await createTask({
       objectiveId: addTaskObj.id,
       title: newTaskTitle.trim(),
       description: "",
@@ -220,13 +223,12 @@ export default function WeeklyPlan() {
       pomodoroCount: 0,
     });
     // link task to objective
-    updateWeeklyObjective(addTaskObj.id, {
+    await updateWeeklyObjective(addTaskObj.id, {
       dailyTaskIds: [...addTaskObj.dailyTaskIds, task.id],
     });
     setNewTaskTitle("");
     setAddTaskObj(null);
-    loadData();
-    dispatchStorageEvent();
+    await loadData();
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -329,8 +331,8 @@ export default function WeeklyPlan() {
               onFocusGoal={setFocusedGoalId}
               onBack={() => setWizardStep(1)}
               onDone={closeWizard}
-              onAddObjective={(goalId, title, desc) => {
-                saveWeeklyObjective({
+              onAddObjective={async (goalId, title, desc) => {
+                await createWeeklyObjective({
                   goalId,
                   title,
                   description: desc,
@@ -341,11 +343,10 @@ export default function WeeklyPlan() {
                   weekEnd,
                   dailyTaskIds: [],
                 });
-                loadData();
-                dispatchStorageEvent();
+                await loadData();
               }}
-              onCycleStatus={(obj) => {
-                cycleStatus(obj);
+              onCycleStatus={async (obj) => {
+                await cycleStatus(obj);
               }}
               onEditObjective={openEdit}
               onDeleteObjective={deleteObj}

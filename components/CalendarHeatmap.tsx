@@ -1,20 +1,19 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getSessions } from "@/lib/storage";
+import { useSessionsDb } from "@/lib/hooks/useDb";
 
 interface HeatmapDay {
   date: string;
   seconds: number;
 }
 
-function computeDays(): HeatmapDay[] {
-  const sessions = getSessions();
-
+function computeDays(sessions: Awaited<ReturnType<typeof useSessionsDb>>["data"]): HeatmapDay[] {
+  const safeSessions = sessions ?? [];
   const map: Record<string, number> = {};
-  sessions.forEach((s) => {
-    const day = new Date(s.startedAt).toISOString().split("T")[0];
+  safeSessions.forEach((s) => {
+    const day = new Date(s.startedAt).toISOString().split("T")[0] ?? "";
     map[day] = (map[day] || 0) + s.duration;
   });
 
@@ -22,42 +21,23 @@ function computeDays(): HeatmapDay[] {
   for (let i = 179; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const key = d.toISOString().split("T")[0];
+    const key = d.toISOString().split("T")[0] ?? "";
     result.push({ date: key, seconds: map[key] || 0 });
   }
   return result;
 }
 
 const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
 export default function CalendarHeatmap() {
-  const [days, setDays] = useState<HeatmapDay[]>([]);
-
-  useEffect(() => {
-    function onStorage() {
-      setDays(computeDays());
-    }
-    window.addEventListener("compass-storage-update", onStorage);
-    onStorage(); // initial load after mount
-    return () => window.removeEventListener("compass-storage-update", onStorage);
-  }, []);
+  const { data: sessions } = useSessionsDb();
+  const days = useMemo(() => computeDays(sessions), [sessions]);
 
   function level(seconds: number) {
     const hours = seconds / 3600;
-
     if (hours === 0) return "bg-[hsl(var(--surface-strong))]";
     if (hours < 1) return "bg-[hsl(var(--timeline-read))]";
     if (hours < 2) return "bg-[hsl(var(--timeline-grep))]";
@@ -70,7 +50,7 @@ export default function CalendarHeatmap() {
   days.forEach((day, i) => {
     const m = new Date(day.date).getMonth();
     if (m !== lastMonth) {
-      monthLabels.push({ label: MONTHS[m], index: i });
+      monthLabels.push({ label: MONTHS[m]!, index: i });
       lastMonth = m;
     }
   });

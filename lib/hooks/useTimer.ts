@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * React hook that encapsulates the entire focus-timer state machine.
  *
@@ -9,19 +8,20 @@
  *
  * The hook also manages task selection, tags, interruptions,
  * and productivity rating on session completion.
+ *
+ * MIGRATED: Now uses PostgreSQL via @/lib/db-client instead of localStorage.
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Task, InterruptionType, InterruptionSeverity } from "@/lib/types";
 import { todayKey, formatDuration } from "@/lib/utils";
 import {
-  getTasksForDate,
-  addSession,
+  fetchTasks,
+  createSession,
   updateTask,
-  addInterruption,
-  getInterruptions,
-  dispatchStorageEvent,
-} from "@/lib/storage";
+  createInterruption as dbCreateInterruption,
+  fetchInterruptions,
+} from "@/lib/db-client";
 import { POMODORO_PRESETS } from "@/lib/constants";
 import type { PomodoroPreset } from "@/lib/constants";
 
@@ -38,16 +38,7 @@ function formatCountdown(totalSeconds: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-function getTodayInterruptions() {
-  const all = getInterruptions();
-  const today = new Date().toISOString().slice(0, 10);
-  return all.filter(
-    (i: { timestamp: string }) => i.timestamp.slice(0, 10) === today,
-  );
-}
-
 // ── Hook ─────────────────────────────────────────────────────────────────────
-
 export function useTimer() {
   // Tasks
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -66,9 +57,9 @@ export function useTimer() {
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
 
   // Pomodoro
-  const [preset, setPreset] = useState<PomodoroPreset>(POMODORO_PRESETS[0]);
+  const [preset, setPreset] = useState<PomodoroPreset>(POMODORO_PRESETS[0]!);
   const [pomodoroSeconds, setPomodoroSeconds] = useState<number>(
-    POMODORO_PRESETS[0].work * 60,
+    POMODORO_PRESETS[0]!.work * 60,
   );
   const [pomodoroCount, setPomodoroCount] = useState<number>(0);
   const [flashActive, setFlashActive] = useState<boolean>(false);
@@ -114,7 +105,6 @@ export function useTimer() {
       : formatCountdown(pomodoroSeconds);
 
   // ── Cleanup ──────────────────────────────────────────────────────────────
-
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -122,7 +112,6 @@ export function useTimer() {
   }, []);
 
   // ── Auto-transition to "ready" when task is selected ────────────────────
-
   useEffect(() => {
     if (timerState === "idle" && taskName) {
       setTimerState("ready");
@@ -131,16 +120,29 @@ export function useTimer() {
     }
   }, [taskName, timerState]);
 
-  // ── Load tasks ──────────────────────────────────────────────────────────
+  // ── Load tasks from DB ─────────────────────────────────────────────────
+  const loadTasks = useCallback(async () => {
+    try {
+      const all = await fetchTasks(todayKey());
+      setTasks(all.filter((t) => t.status !== "completed"));
 
-  const loadTasks = useCallback(() => {
-    const all = getTasksForDate(todayKey());
-    setTasks(all.filter((t) => t.status !== "completed"));
-    setTodayInterruptions(getTodayInterruptions());
+      // Load today's interruptions
+      const today = new Date().toISOString().slice(0, 10);
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+      const interruptions = await fetchInterruptions(today, tomorrowStr);
+      setTodayInterruptions(
+        interruptions
+          .filter((i) => i.timestamp.slice(0, 10) === today)
+          .map((i) => ({ type: i.type, duration: i.duration, note: i.note, timestamp: i.timestamp })),
+      );
+    } catch (e) {
+      console.error("Failed to load tasks:", e);
+    }
   }, []);
 
   // ── Interval management ─────────────────────────────────────────────────
-
   function clearTimer() {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -149,7 +151,6 @@ export function useTimer() {
   }
 
   // ── Standard timer controls ─────────────────────────────────────────────
-
   function handleStart() {
     if (!taskName) {
       setError("Select a task or enter a name before starting.");
@@ -191,36 +192,40 @@ export function useTimer() {
     setRateOpen(true);
   }
 
-  function handleRateConfirm() {
+  async function handleRateConfirm() {
     const endTime = Date.now();
     const duration = elapsedSeconds;
 
-    addSession({
-      taskId: selectedTaskId || null,
-      taskName,
-      tags,
-      duration,
-      durationFormatted: formatDuration(duration),
-      startedAt: new Date(
-        startTimeRef.current - pausedSecondsRef.current * 1000,
-      ).toISOString(),
-      endedAt: new Date(endTime).toISOString(),
-      date: todayKey(),
-      pomodoroCount: mode === "pomodoro" ? pomodoroCount : 0,
-      productivityRating: rating || null,
-    });
-
-    if (selectedTaskId) {
-      updateTask(selectedTaskId, {
-        status: "completed",
+    try {
+      await createSession({
+        taskId: selectedTaskId || null,
+        taskName,
+        tags,
+        duration,
+        durationFormatted: formatDuration(duration),
+        startedAt: new Date(
+          startTimeRef.current - pausedSecondsRef.current * 1000,
+        ).toISOString(),
+        endedAt: new Date(endTime).toISOString(),
+        date: todayKey(),
         pomodoroCount: mode === "pomodoro" ? pomodoroCount : 0,
+        productivityRating: rating || null,
       });
+
+      if (selectedTaskId) {
+        await updateTask(selectedTaskId, {
+          status: "completed",
+          pomodoroCount: mode === "pomodoro" ? pomodoroCount : 0,
+        });
+      }
+
+      // Reload tasks from DB
+      const all = await fetchTasks(todayKey());
+      setTasks(all.filter((t) => t.status !== "completed"));
+    } catch (e) {
+      console.error("Failed to save session:", e);
     }
 
-    dispatchStorageEvent();
-    setTasks(
-      getTasksForDate(todayKey()).filter((t) => t.status !== "completed"),
-    );
     resetAll();
     setRateOpen(false);
   }
@@ -245,7 +250,6 @@ export function useTimer() {
   }
 
   // ── Pomodoro timer controls ─────────────────────────────────────────────
-
   function triggerWorkComplete() {
     clearTimer();
     setPomodoroCount((c) => c + 1);
@@ -321,7 +325,6 @@ export function useTimer() {
   }
 
   // ── Tags ────────────────────────────────────────────────────────────────
-
   function handleAddTag() {
     const raw = newTag.trim();
     if (!raw) return;
@@ -338,28 +341,31 @@ export function useTimer() {
   }
 
   // ── Interruption ────────────────────────────────────────────────────────
-
-  function handleInterruptConfirm() {
-    addInterruption({
-      sessionId: null,
-      type: interruptType,
-      cause: interruptNote,
-      duration: interruptDuration * 60,
-      note: interruptNote,
-      timestamp: new Date().toISOString(),
-      recoveryTime: 0,
-      severity: interruptSeverity,
-    });
+  async function handleInterruptConfirm() {
+    try {
+      await dbCreateInterruption({
+        sessionId: null,
+        type: interruptType,
+        cause: interruptNote,
+        duration: interruptDuration * 60,
+        note: interruptNote,
+        timestamp: new Date().toISOString(),
+        recoveryTime: 0,
+        severity: interruptSeverity,
+      });
+    } catch (e) {
+      console.error("Failed to save interruption:", e);
+    }
     setInterruptOpen(false);
     setInterruptNote("");
     setInterruptType("distraction");
     setInterruptSeverity("low");
     setInterruptDuration(5);
-    setTodayInterruptions(getTodayInterruptions());
+    // Reload today's interruptions
+    loadTasks();
   }
 
   // ── Mode toggle ─────────────────────────────────────────────────────────
-
   function handleModeChange(m: TimerMode) {
     if (timerState !== "idle") return;
     setMode(m);
@@ -374,7 +380,6 @@ export function useTimer() {
   }
 
   // ── Status message ──────────────────────────────────────────────────────
-
   function statusMessage(): string | null {
     if (timerState === "break") return "Break time! ☕";
     if (timerState === "running" && taskName) return `Working on: ${taskName}`;

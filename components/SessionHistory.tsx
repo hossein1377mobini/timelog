@@ -6,12 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import {
-  getSessions,
-  deleteSession as storageDeleteSession,
-  clearSessions,
-  dispatchStorageEvent,
-} from "@/lib/storage";
+import { useSessionsDb, deleteSessionDb } from "@/lib/hooks/useDb";
 import type { Session } from "@/lib/types";
 
 function formatTime(totalSeconds: number): string {
@@ -22,28 +17,16 @@ function formatTime(totalSeconds: number): string {
 }
 
 export default function SessionHistory() {
-  const [sessions, setSessions] = useState<Session[]>([]);
-
-  useEffect(() => {
-    loadSessions();
-    window.addEventListener("compass-storage-update", loadSessions);
-    return () => window.removeEventListener("compass-storage-update", loadSessions);
-  }, []);
-
-  function loadSessions() {
-    setSessions(getSessions());
-  }
+  const { data: sessionsData, loading, refetch } = useSessionsDb();
+  const sessions = sessionsData ?? [];
 
   function deleteSession(id: string) {
-    storageDeleteSession(id);
-    setSessions(getSessions());
-    dispatchStorageEvent();
+    deleteSessionDb(id).then(() => refetch());
   }
 
   function clearAll() {
-    clearSessions();
-    setSessions([]);
-    dispatchStorageEvent();
+    // For bulk delete, we delete one by one (no bulk API endpoint)
+    Promise.all(sessions.map(s => deleteSessionDb(s.id))).then(() => refetch());
   }
 
   const totalSeconds = sessions.reduce((sum, s) => sum + s.duration, 0);
@@ -54,6 +37,15 @@ export default function SessionHistory() {
     });
     return acc;
   }, {});
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader><CardTitle>Session History</CardTitle></CardHeader>
+        <CardContent><p className="text-[14px] text-[hsl(var(--muted))] text-center py-8">Loading...</p></CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

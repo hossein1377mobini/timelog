@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { runMigrationsAction, checkOnboardingAction, completeOnboardingAction } from "@/app/actions";
+import { checkOnboardingAction, completeOnboardingAction } from "@/app/actions";
 import TimerCard from "@/components/TimerCard";
 import SessionHistory from "@/components/SessionHistory";
 import WeeklyReport from "@/components/WeeklyReport";
@@ -31,7 +31,7 @@ export default function Home() {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
-    runMigrationsAction();
+    // Migrations are applied server-side via schema.sql directly — no client call needed
     async function checkOnboarding() {
       const done = await checkOnboardingAction();
       if (!done) {

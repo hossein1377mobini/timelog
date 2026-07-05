@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { Goal, WeeklyObjective } from "@/lib/types";
 import { ObjectiveCard } from "./ObjectiveCard";
-import { GOAL_COLOR_RECORD } from "@/lib/constants";
+import { getGoalColor } from "@/lib/constants";
 
 interface GoalSectionProps {
   goal: Goal;
@@ -46,7 +46,7 @@ export const GoalSection = React.memo(function GoalSection({
   onChangeDesc,
   onAddObjective,
 }: GoalSectionProps) {
-  const color = GOAL_COLOR_RECORD[goal.color as keyof typeof GOAL_COLOR_RECORD] || GOAL_COLOR_RECORD.Purple;
+  const color = getGoalColor(goal.color);
   const pct = Math.min(
     100,
     Math.round((logged / (goal.weeklyTarget || 1)) * 100),

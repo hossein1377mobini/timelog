@@ -1,22 +1,39 @@
 /**
  * Database persistence layer for interruptions.
- * 
- * This module provides async functions to read/write interruptions
- * from the PostgreSQL `interruptions` table.
+ *
+ * Provides async functions to read/write interruptions from the
+ * PostgreSQL `interruptions` table using the {@link withDb} helper.
  */
 
-import pool from "@/lib/db"
 import type { Interruption } from "@/lib/types"
-import { notifyDatabaseChange } from "@/lib/db-events"
+import { withDb } from "@/lib/db-utils"
+
+// ── Row mapping helpers ──────────────────────────────────────────────────────
+
+function rowToInterruption(row: Record<string, unknown>): Interruption {
+  return {
+    id: row.id as string,
+    sessionId: row.session_id as string | null,
+    type: row.type as Interruption["type"],
+    cause: row.cause as string,
+    duration: row.duration as number,
+    note: row.note as string,
+    timestamp: row.timestamp as string,
+    recoveryTime: row.recovery_time as number,
+    severity: row.severity as Interruption["severity"],
+  }
+}
+
+// ── CRUD ─────────────────────────────────────────────────────────────────────
 
 /**
- * Create a new interruption in the database.
- * Returns the created interruption with its generated ID.
+ * Create a new interruption.  Returns the created interruption with its ID.
  */
-export async function createInterruption(input: Omit<Interruption, "id">): Promise<Interruption> {
-  const client = await pool.connect()
-  try {
-    const result = await client.query(
+export async function createInterruption(
+  input: Omit<Interruption, "id">,
+): Promise<Interruption> {
+  return withDb(async (client) => {
+    const { rows } = await client.query(
       `INSERT INTO interruptions (
         session_id, type, cause, duration, note, timestamp, recovery_time, severity
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -30,170 +47,107 @@ export async function createInterruption(input: Omit<Interruption, "id">): Promi
         input.timestamp,
         input.recoveryTime,
         input.severity,
-      ]
+      ],
     )
-    
-    const row = result.rows[0]
-    return {
-      id: row.id,
-      sessionId: row.session_id,
-      type: row.type,
-      cause: row.cause,
-      duration: row.duration,
-      note: row.note,
-      timestamp: row.timestamp,
-      recoveryTime: row.recovery_time,
-      severity: row.severity,
-    }
-  } finally {
-    client.release()
-  }
+    return rowToInterruption(rows[0])
+  })
 }
 
 /**
- * Get all interruptions, ordered by timestamp descending (newest first).
- * Supports pagination with limit and offset.
+ * Get all interruptions, newest first, with pagination.
  */
 export async function getAllInterruptions(options?: {
-  limit?: number;
-  offset?: number;
+  limit?: number
+  offset?: number
 }): Promise<{ interruptions: Interruption[]; total: number }> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     const limit = options?.limit || 50
     const offset = options?.offset || 0
-    
-    // Get total count
-    const countResult = await client.query("SELECT COUNT(*) as count FROM interruptions")
-    const total = parseInt(countResult.rows[0].count, 10)
-    
-    // Get paginated interruptions
-    const result = await client.query(
-      "SELECT * FROM interruptions ORDER BY timestamp DESC LIMIT $1 OFFSET $2",
-      [limit, offset]
+
+    const { rows: countRows } = await client.query(
+      "SELECT COUNT(*) as count FROM interruptions",
     )
-    
-    const interruptions = result.rows.map((row) => ({
-      id: row.id,
-      sessionId: row.session_id,
-      type: row.type,
-      cause: row.cause,
-      duration: row.duration,
-      note: row.note,
-      timestamp: row.timestamp,
-      recoveryTime: row.recovery_time,
-      severity: row.severity,
-    }))
-    
-    return { interruptions, total }
-  } finally {
-    client.release()
-  }
+    const total = parseInt(countRows[0].count as string, 10)
+
+    const { rows } = await client.query(
+      "SELECT * FROM interruptions ORDER BY timestamp DESC LIMIT $1 OFFSET $2",
+      [limit, offset],
+    )
+    return { interruptions: rows.map(rowToInterruption), total }
+  })
 }
 
 /**
- * Get interruptions for a specific session.
+ * Get interruptions for a specific session, newest first.
  */
-export async function getInterruptionsBySession(sessionId: string): Promise<Interruption[]> {
-  const client = await pool.connect()
-  try {
-    const result = await client.query(
+export async function getInterruptionsBySession(
+  sessionId: string,
+): Promise<Interruption[]> {
+  return withDb(async (client) => {
+    const { rows } = await client.query(
       "SELECT * FROM interruptions WHERE session_id = $1 ORDER BY timestamp DESC",
-      [sessionId]
+      [sessionId],
     )
-    
-    return result.rows.map((row) => ({
-      id: row.id,
-      sessionId: row.session_id,
-      type: row.type,
-      cause: row.cause,
-      duration: row.duration,
-      note: row.note,
-      timestamp: row.timestamp,
-      recoveryTime: row.recovery_time,
-      severity: row.severity,
-    }))
-  } finally {
-    client.release()
-  }
+    return rows.map(rowToInterruption)
+  })
 }
 
 /**
  * Get interruptions within a date range.
  */
-export async function getInterruptionsByDateRange(startDate: string, endDate: string): Promise<Interruption[]> {
-  const client = await pool.connect()
-  try {
-    const result = await client.query(
-      `SELECT * FROM interruptions 
-       WHERE timestamp::date >= $1::date AND timestamp::date <= $2::date 
+export async function getInterruptionsByDateRange(
+  startDate: string,
+  endDate: string,
+): Promise<Interruption[]> {
+  return withDb(async (client) => {
+    const { rows } = await client.query(
+      `SELECT * FROM interruptions
+       WHERE timestamp::date >= $1::date AND timestamp::date <= $2::date
        ORDER BY timestamp DESC`,
-      [startDate, endDate]
+      [startDate, endDate],
     )
-    
-    return result.rows.map((row) => ({
-      id: row.id,
-      sessionId: row.session_id,
-      type: row.type,
-      cause: row.cause,
-      duration: row.duration,
-      note: row.note,
-      timestamp: row.timestamp,
-      recoveryTime: row.recovery_time,
-      severity: row.severity,
-    }))
-  } finally {
-    client.release()
-  }
+    return rows.map(rowToInterruption)
+  })
 }
 
 /**
  * Delete an interruption by ID.
  */
 export async function deleteInterruption(id: string): Promise<void> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     await client.query("DELETE FROM interruptions WHERE id = $1", [id])
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
- * Delete all interruptions (used for data reset).
+ * Delete all interruptions (data reset).
  */
 export async function deleteAllInterruptions(): Promise<void> {
-  const client = await pool.connect()
-  try {
+  return withDb(async (client) => {
     await client.query("DELETE FROM interruptions")
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /**
- * Get interruption count for analytics.
+ * Get total interruption count.
  */
 export async function getInterruptionCount(): Promise<number> {
-  const client = await pool.connect()
-  try {
-    const result = await client.query("SELECT COUNT(*) as count FROM interruptions")
-    return parseInt(result.rows[0].count, 10)
-  } finally {
-    client.release()
-  }
+  return withDb(async (client) => {
+    const { rows } = await client.query(
+      "SELECT COUNT(*) as count FROM interruptions",
+    )
+    return parseInt(rows[0].count as string, 10)
+  })
 }
 
 /**
- * Get total interruption time (sum of all durations) in seconds.
+ * Get total interruption time (sum of durations) in seconds.
  */
 export async function getTotalInterruptionTime(): Promise<number> {
-  const client = await pool.connect()
-  try {
-    const result = await client.query("SELECT COALESCE(SUM(duration), 0) as total FROM interruptions")
-    return parseInt(result.rows[0].total, 10)
-  } finally {
-    notifyDatabaseChange()
-    client.release()
-  }
+  return withDb(async (client) => {
+    const { rows } = await client.query(
+      "SELECT COALESCE(SUM(duration), 0) as total FROM interruptions",
+    )
+    return parseInt(rows[0].total as string, 10)
+  })
 }

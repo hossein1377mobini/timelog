@@ -1,8 +1,10 @@
-import React from "react";
-import { Edit2, Trash2, Plus, ListTodo } from "lucide-react";
-import { getTasksForObjective } from "@/lib/storage";
-import type { WeeklyObjective } from "@/lib/types";
-import { statusLabel, statusColors } from "./weeklyPlanHelpers";
+"use client"
+
+import React from "react"
+import { Edit2, Trash2, Plus, ListTodo } from "lucide-react"
+import { fetchTasksByObjective } from "@/lib/db-client"
+import type { WeeklyObjective } from "@/lib/types"
+import { statusLabel, statusColors } from "./weeklyPlanHelpers"
 
 interface ObjectiveCardProps {
   obj: WeeklyObjective;
@@ -21,17 +23,22 @@ export const ObjectiveCard = React.memo(function ObjectiveCard({
   onDelete,
   onAddTask,
 }: ObjectiveCardProps) {
-  const tasks = getTasksForObjective(obj.id);
-  const doneTasks = tasks.filter((t) => t.status === "completed").length;
+  const [tasks, setTasks] = React.useState<Array<{ status: string }>>([])
+
+  React.useEffect(() => {
+    fetchTasksByObjective(obj.id).then(setTasks).catch(() => setTasks([]))
+  }, [obj.id])
+
+  const doneTasks = tasks.filter((t) => t.status === "completed").length
   const taskPct =
-    tasks.length > 0 ? Math.round((doneTasks / tasks.length) * 100) : 0;
+    tasks.length > 0 ? Math.round((doneTasks / tasks.length) * 100) : 0
 
   const borderClass =
     obj.status === "completed"
       ? "border-[hsl(var(--success))]/30 bg-[hsl(var(--success))]/5"
       : obj.status === "in-progress"
         ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/5"
-        : "border-[hsl(var(--hairline))] bg-[hsl(var(--surface-card))]";
+        : "border-[hsl(var(--hairline))] bg-[hsl(var(--surface-card))]"
 
   return (
     <div
@@ -129,5 +136,5 @@ export const ObjectiveCard = React.memo(function ObjectiveCard({
         </button>
       </div>
     </div>
-  );
-});
+  )
+})

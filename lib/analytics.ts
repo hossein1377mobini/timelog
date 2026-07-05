@@ -98,8 +98,8 @@ export function bestStreak(sessions: Session[]): number {
   let best = 1;
   let run = 1;
   for (let i = 1; i < sorted.length; i++) {
-    const prev = new Date(sorted[i - 1]);
-    const curr = new Date(sorted[i]);
+    const prev = new Date(sorted[i - 1]!);
+    const curr = new Date(sorted[i]!);
     const diff = (curr.getTime() - prev.getTime()) / 86_400_000;
     if (diff === 1) {
       run++;

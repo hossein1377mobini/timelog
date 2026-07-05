@@ -29,7 +29,7 @@ export class ErrorBoundary extends React.Component<
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  override componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("Error boundary caught:", error, errorInfo);
     
     // In production, you might want to log this to an error tracking service
@@ -40,7 +40,7 @@ export class ErrorBoundary extends React.Component<
     this.setState({ hasError: false, error: null });
   };
 
-  render() {
+  override render() {
     if (this.state.hasError) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-background p-4">

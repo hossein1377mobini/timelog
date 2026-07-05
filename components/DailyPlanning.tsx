@@ -4,18 +4,17 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sun, Moon } from "lucide-react";
 import {
-  getGoals,
-  getObjectivesForWeek,
-  getTasksForObjective,
-  saveTask,
-  updateTask,
-  getReflectionByDate,
+  fetchGoals,
+  fetchWeeklyObjectives,
+  fetchTasksByObjective,
+  createTask,
+  updateTask as dbUpdateTask,
+  fetchReflections,
   saveReflection,
-  getTasksForDate,
-  dispatchStorageEvent,
-} from "@/lib/storage";
-import type { Goal, WeeklyObjective, Task, ChecklistItem } from "@/lib/types";
-import { todayKey, generateId } from "@/lib/utils";
+  fetchTasks,
+} from "@/lib/db-client";
+import type { Goal, WeeklyObjective, Task, ChecklistItem, Reflection } from "@/lib/types";
+import { todayKey, generateId, weekStartKey } from "@/lib/utils";
 import { TaskItem } from "./daily-planning/TaskItem";
 import { TaskEditDialog } from "./daily-planning/TaskEditDialog";
 import { MorningPlanningTab } from "./daily-planning/MorningPlanningTab";
@@ -23,12 +22,25 @@ import { EveningReflectionTab } from "./daily-planning/EveningReflectionTab";
 
 // ── Bootstrap helper ─────────────────────────────────────────────────────────
 
-function readInitialData() {
-  const goals = getGoals();
-  const objectives = getObjectivesForWeek();
-  const tasks = getTasksForDate(todayKey());
-  const ref = getReflectionByDate(todayKey());
-  return { goals, objectives, tasks, ref };
+async function readInitialData() {
+  const [goals, objectives, tasks, reflections] = await Promise.all([
+    fetchGoals(),
+    fetchWeeklyObjectives(weekStartKey()),
+    fetchTasks(todayKey()),
+    fetchReflections(),
+  ]);
+  const ref = reflections.find((r: Reflection) => r.date === todayKey()) ?? null;
+
+  // Fetch tasks for each objective
+  const objectiveTasks = new Map<string, Task[]>();
+  await Promise.all(
+    objectives.map(async (obj) => {
+      const tasks = await fetchTasksByObjective(obj.id);
+      objectiveTasks.set(obj.id, tasks);
+    })
+  );
+
+  return { goals, objectives, tasks, ref, objectiveTasks };
 }
 
 // ── Edit-task dialog state type ───────────────────────────────────────────────
@@ -55,6 +67,7 @@ export default function DailyPlanning() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [objectives, setObjectives] = useState<WeeklyObjective[]>([]);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
+  const [objectiveTasks, setObjectiveTasks] = useState<Map<string, Task[]>>(new Map());
   const [editing, setEditing] = useState<boolean>(true);
 
   // Morning planning
@@ -88,33 +101,34 @@ export default function DailyPlanning() {
 
   // ── Storage sync ────────────────────────────────────────────────────────────
 
-  function applyData(data: ReturnType<typeof readInitialData>) {
-    setGoals(data.goals);
-    setObjectives(data.objectives);
-    setTodayTasks(data.tasks);
-    if (data.tasks.length > 0) setEditing(false);
-    if (data.ref) {
-      setAccomplishments(data.ref.accomplishments.join("\n"));
-      setDistractions(data.ref.challenges.join("\n"));
-      setRating(data.ref.rating);
-      setDifferently(data.ref.improvements.join("\n"));
-      setGratitude(
-        data.ref.wins.length >= 3
-          ? [data.ref.wins[0] || "", data.ref.wins[1] || "", data.ref.wins[2] || ""]
-          : ["", "", ""],
-      );
-      setTomorrowFocus(data.ref.tomorrowPlan);
-      setEveningMood(data.ref.mood);
+  async function applyData() {
+    try {
+      const data = await readInitialData();
+      setGoals(data.goals);
+      setObjectives(data.objectives);
+      setTodayTasks(data.tasks);
+      setObjectiveTasks(data.objectiveTasks);
+      if (data.tasks.length > 0) setEditing(false);
+      if (data.ref) {
+        setAccomplishments(data.ref.accomplishments.join("\n"));
+        setDistractions(data.ref.challenges.join("\n"));
+        setRating(data.ref.rating);
+        setDifferently(data.ref.improvements.join("\n"));
+        setGratitude(
+          data.ref.wins.length >= 3
+            ? [data.ref.wins[0] || "", data.ref.wins[1] || "", data.ref.wins[2] || ""]
+            : ["", "", ""],
+        );
+        setTomorrowFocus(data.ref.tomorrowPlan);
+        setEveningMood(data.ref.mood);
+      }
+    } catch (e) {
+      console.error("Failed to load daily planning data:", e);
     }
   }
 
   useEffect(() => {
-    function onStorage() {
-      applyData(readInitialData());
-    }
-    window.addEventListener("compass-storage-update", onStorage);
-    onStorage(); // initial load after mount
-    return () => window.removeEventListener("compass-storage-update", onStorage);
+    applyData();
   }, []);
 
   // ── Derived data ────────────────────────────────────────────────────────────
@@ -144,7 +158,7 @@ export default function DailyPlanning() {
     for (const obj of objectives) {
       const goal = goals.find((g) => g.id === obj.goalId);
       if (!goal) continue;
-      const allObjTasks = getTasksForObjective(obj.id);
+      const allObjTasks = objectiveTasks.get(obj.id) ?? [];
       if (allObjTasks.length === 0) continue;
       result.push({
         objective: obj,
@@ -156,7 +170,7 @@ export default function DailyPlanning() {
       });
     }
     return result;
-  }, [objectives, goals, todayTasks]);
+  }, [objectives, goals, todayTasks, objectiveTasks]);
 
   const completedCount = todayTasks.filter(
     (t) => t.status === "completed",
@@ -172,10 +186,10 @@ export default function DailyPlanning() {
 
   // ── Morning actions ─────────────────────────────────────────────────────────
 
-  function addFreeTask() {
+  async function addFreeTask() {
     const text = newFreeTask.trim();
     if (!text) return;
-    const task = saveTask({
+    const task = await createTask({
       objectiveId: null,
       title: text,
       description: "",
@@ -191,53 +205,47 @@ export default function DailyPlanning() {
     });
     setTodayTasks((prev) => [...prev, task]);
     setNewFreeTask("");
-    dispatchStorageEvent();
   }
 
-  function selectTaskFromObjective(task: Task) {
-    updateTask(task.id, { scheduledDate: todayKey() });
+  async function selectTaskFromObjective(task: Task) {
+    await dbUpdateTask(task.id, { scheduledDate: todayKey() });
     const updated: Task = { ...task, scheduledDate: todayKey() };
     setTodayTasks((prev) => [...prev, updated]);
-    dispatchStorageEvent();
   }
 
-  function removeTask(taskId: string) {
-    updateTask(taskId, { scheduledDate: "" });
+  async function removeTask(taskId: string) {
+    await dbUpdateTask(taskId, { scheduledDate: "" });
     setTodayTasks((prev) => prev.filter((t) => t.id !== taskId));
-    dispatchStorageEvent();
   }
 
   function saveMorningPlan() {
     setEditing(false);
-    dispatchStorageEvent();
   }
 
   /** Cycle: pending → in-progress → completed → pending */
-  function cycleStatus(task: Task) {
+  async function cycleStatus(task: Task) {
     const next: Task["status"] =
       task.status === "pending"
         ? "in-progress"
         : task.status === "in-progress"
           ? "completed"
           : "pending";
-    updateTask(task.id, { status: next });
+    await dbUpdateTask(task.id, { status: next });
     setTodayTasks((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, status: next } : t)),
     );
-    dispatchStorageEvent();
   }
 
-  function toggleChecklistItem(task: Task, itemId: string) {
+  async function toggleChecklistItem(task: Task, itemId: string) {
     const newChecklist = task.checklist.map((item) =>
       item.id === itemId ? { ...item, done: !item.done } : item,
     );
-    updateTask(task.id, { checklist: newChecklist });
+    await dbUpdateTask(task.id, { checklist: newChecklist });
     setTodayTasks((prev) =>
       prev.map((t) =>
         t.id === task.id ? { ...t, checklist: newChecklist } : t,
       ),
     );
-    dispatchStorageEvent();
   }
 
   function toggleChecklist(taskId: string) {
@@ -265,7 +273,7 @@ export default function DailyPlanning() {
     });
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!editState) return;
     const patch: Partial<Task> = {
       title: editState.title.trim() || "(untitled)",
@@ -279,11 +287,10 @@ export default function DailyPlanning() {
         .filter(Boolean),
       checklist: editState.checklist,
     };
-    updateTask(editState.taskId, patch);
+    await dbUpdateTask(editState.taskId, patch);
     setTodayTasks((prev) =>
       prev.map((t) => (t.id === editState.taskId ? { ...t, ...patch } : t)),
     );
-    dispatchStorageEvent();
     setEditState(null);
   }
 
@@ -326,8 +333,8 @@ export default function DailyPlanning() {
 
   // ── Evening actions ─────────────────────────────────────────────────────────
 
-  function saveEveningReflection() {
-    saveReflection({
+  async function saveEveningReflection() {
+    await saveReflection({
       date: todayKey(),
       mood: eveningMood,
       accomplishments: accomplishments.split("\n").filter(Boolean),
@@ -338,7 +345,6 @@ export default function DailyPlanning() {
       tomorrowPlan: tomorrowFocus,
       notes: "",
     });
-    dispatchStorageEvent();
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
