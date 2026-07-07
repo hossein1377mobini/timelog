@@ -30,7 +30,7 @@ export default function TimerInterruptionSummary({ t }: Props) {
   return (
     <div className="rounded-md border border-[hsl(var(--hairline))] bg-[hsl(var(--canvas-soft))] px-3 py-2.5 space-y-1.5">
       <p className="text-[11px] font-semibold text-[hsl(var(--body-strong))] flex items-center gap-1">
-        📊 Today's interruptions
+        📊 Today{'\u2019'}s interruptions
         <span className="ml-1 rounded-full bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))] px-1.5 py-0.5 text-[10px] font-bold">
           {t.todayInterruptions.length}
         </span>

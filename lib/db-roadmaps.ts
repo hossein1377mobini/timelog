@@ -53,18 +53,20 @@ async function getNodeChildren(client: import("pg").PoolClient, nodeId: string):
 // =============================================================================
 
 /** Get legacy roadmap phases for a specific goal. */
-export async function getRoadmapForGoal(goalId: string): Promise<Phase[]> {
+export async function getRoadmapForGoal(userId: string, goalId: string): Promise<Phase[]> {
   return withDb(async (client) => {
     const { rows } = await client.query(
-      "SELECT * FROM roadmap_phases WHERE goal_id = $1 ORDER BY order_index",
-      [goalId],
+      `SELECT rp.* FROM roadmap_phases rp
+       JOIN goals g ON g.id = rp.goal_id
+       WHERE g.user_id = $1 AND rp.goal_id = $2 ORDER BY rp.order_index`,
+      [userId, goalId],
     )
     return rows.map(phaseFromRow)
   })
 }
 
 /** Get all legacy roadmaps, paginated. */
-export async function getRoadmaps(options?: {
+export async function getRoadmaps(userId: string, options?: {
   limit?: number
   offset?: number
 }): Promise<{ roadmaps: RoadmapMap; total: number }> {
@@ -72,12 +74,12 @@ export async function getRoadmaps(options?: {
     const limit = options?.limit ?? 200
     const offset = options?.offset ?? 0
 
-    const { rows: countRows } = await client.query("SELECT COUNT(*) AS count FROM roadmap_phases")
+    const { rows: countRows } = await client.query("SELECT COUNT(*) AS count FROM roadmap_phases WHERE user_id = $1", [userId])
     const total = parseInt(countRows[0].count as string, 10)
 
     const { rows } = await client.query(
-      "SELECT * FROM roadmap_phases ORDER BY goal_id, order_index LIMIT $1 OFFSET $2",
-      [limit, offset],
+      "SELECT rp.* FROM roadmap_phases rp JOIN goals g ON g.id = rp.goal_id WHERE g.user_id = $1 ORDER BY rp.goal_id, rp.order_index LIMIT $2 OFFSET $3",
+      [userId, limit, offset],
     )
 
     const roadmapMap: RoadmapMap = {}
@@ -91,9 +93,12 @@ export async function getRoadmaps(options?: {
 }
 
 /** Replace legacy roadmap phases for a goal (delete-all + insert). */
-export async function saveRoadmapForGoal(goalId: string, phases: Phase[]): Promise<void> {
+export async function saveRoadmapForGoal(userId: string, goalId: string, phases: Phase[]): Promise<void> {
   return withTransaction(async (client) => {
-    await client.query("DELETE FROM roadmap_phases WHERE goal_id = $1", [goalId])
+    await client.query(
+      "DELETE FROM roadmap_phases WHERE goal_id = $1 AND goal_id IN (SELECT id FROM goals WHERE user_id = $2)",
+      [goalId, userId],
+    )
     for (let i = 0; i < phases.length; i++) {
       await client.query(
         "INSERT INTO roadmap_phases (goal_id, name, done, order_index) VALUES ($1, $2, $3, $4)",
@@ -104,16 +109,19 @@ export async function saveRoadmapForGoal(goalId: string, phases: Phase[]): Promi
 }
 
 /** Delete all legacy roadmap phases for a goal. */
-export async function deleteRoadmapForGoal(goalId: string): Promise<void> {
+export async function deleteRoadmapForGoal(userId: string, goalId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM roadmap_phases WHERE goal_id = $1", [goalId])
+    await client.query(
+      "DELETE FROM roadmap_phases WHERE goal_id = $1 AND goal_id IN (SELECT id FROM goals WHERE user_id = $2)",
+      [goalId, userId],
+    )
   })
 }
 
 /** Delete ALL legacy roadmap phases (testing / cleanup). */
-export async function deleteAllRoadmapPhases(): Promise<void> {
+export async function deleteAllRoadmapPhases(userId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM roadmap_phases")
+    await client.query("DELETE FROM roadmap_phases WHERE user_id = $1", [userId])
   })
 }
 
@@ -122,11 +130,13 @@ export async function deleteAllRoadmapPhases(): Promise<void> {
 // =============================================================================
 
 /** Get the hierarchical roadmap tree for a goal (flat Record<ID, RoadmapNode>). */
-export async function getRoadmapTree(goalId: string): Promise<RoadmapTree> {
+export async function getRoadmapTree(userId: string, goalId: string): Promise<RoadmapTree> {
   return withDb(async (client) => {
     const { rows } = await client.query(
-      "SELECT * FROM roadmap_nodes WHERE goal_id = $1 ORDER BY order_index",
-      [goalId],
+      `SELECT rn.* FROM roadmap_nodes rn
+       JOIN goals g ON g.id = rn.goal_id
+       WHERE g.user_id = $1 AND rn.goal_id = $2 ORDER BY rn.order_index`,
+      [userId, goalId],
     )
     const tree: RoadmapTree = {}
     for (const row of rows) tree[row.id as string] = nodeFromRow(row)
@@ -136,7 +146,7 @@ export async function getRoadmapTree(goalId: string): Promise<RoadmapTree> {
 }
 
 /** Get all roadmap trees for all goals, paginated. */
-export async function getRoadmapTrees(options?: {
+export async function getRoadmapTrees(userId: string, options?: {
   limit?: number
   offset?: number
 }): Promise<{ trees: Record<string, RoadmapTree>; total: number }> {
@@ -144,12 +154,12 @@ export async function getRoadmapTrees(options?: {
     const limit = options?.limit ?? 200
     const offset = options?.offset ?? 0
 
-    const { rows: countRows } = await client.query("SELECT COUNT(*) AS count FROM roadmap_nodes")
+    const { rows: countRows } = await client.query("SELECT COUNT(*) AS count FROM roadmap_nodes WHERE user_id = $1", [userId])
     const total = parseInt(countRows[0].count as string, 10)
 
     const { rows } = await client.query(
-      "SELECT * FROM roadmap_nodes ORDER BY goal_id, order_index LIMIT $1 OFFSET $2",
-      [limit, offset],
+      "SELECT * FROM roadmap_nodes WHERE user_id = $1 ORDER BY goal_id, order_index LIMIT $2 OFFSET $3",
+      [userId, limit, offset],
     )
 
     const treesMap: Record<string, RoadmapTree> = {}
@@ -164,9 +174,9 @@ export async function getRoadmapTrees(options?: {
 }
 
 /** Replace the entire roadmap tree for a goal. */
-export async function saveRoadmapTree(goalId: string, tree: RoadmapTree): Promise<void> {
+export async function saveRoadmapTree(userId: string, goalId: string, tree: RoadmapTree): Promise<void> {
   return withTransaction(async (client) => {
-    await client.query("DELETE FROM roadmap_nodes WHERE goal_id = $1", [goalId])
+    await client.query("DELETE FROM roadmap_nodes WHERE goal_id = $1 AND user_id = $2", [goalId, userId])
     const nodes = Object.values(tree)
     for (const node of nodes) {
       await client.query(
@@ -180,10 +190,17 @@ export async function saveRoadmapTree(goalId: string, tree: RoadmapTree): Promis
 
 /** Add a single roadmap node. */
 export async function addRoadmapNode(
+  userId: string,
   goalId: string,
   node: Omit<RoadmapNode, "id" | "createdAt">,
 ): Promise<RoadmapNode> {
   return withDb(async (client) => {
+    // Verify goal belongs to user
+    const { rows: goalRows } = await client.query(
+      "SELECT id FROM goals WHERE id = $1 AND user_id = $2",
+      [goalId, userId],
+    )
+    if (goalRows.length === 0) throw new Error("Goal not found")
     const { rows } = await client.query(
       `INSERT INTO roadmap_nodes (type, name, description, goal_id, parent_id, status, order_index)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
@@ -195,10 +212,19 @@ export async function addRoadmapNode(
 
 /** Update a roadmap node. */
 export async function updateRoadmapNode(
+  userId: string,
   nodeId: string,
   updates: Partial<Omit<RoadmapNode, "id" | "goalId" | "children" | "createdAt">>,
 ): Promise<RoadmapNode> {
   return withDb(async (client) => {
+    // Verify node belongs to user's goal
+    const { rows: nodeRows } = await client.query(
+      `SELECT rn.goal_id FROM roadmap_nodes rn
+       JOIN goals g ON g.id = rn.goal_id
+       WHERE rn.id = $1 AND g.user_id = $2`,
+      [nodeId, userId],
+    )
+    if (nodeRows.length === 0) throw new Error("Roadmap node not found")
     const fieldMap: Record<string, keyof typeof updates> = {
       type: "type",
       name: "name",
@@ -234,30 +260,33 @@ export async function updateRoadmapNode(
 }
 
 /** Delete a node (CASCADE handles descendants). */
-export async function deleteRoadmapNode(nodeId: string): Promise<void> {
+export async function deleteRoadmapNode(userId: string, nodeId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM roadmap_nodes WHERE id = $1", [nodeId])
+    await client.query(
+      `DELETE FROM roadmap_nodes WHERE id = $1 AND goal_id IN (SELECT id FROM goals WHERE user_id = $2)`,
+      [nodeId, userId],
+    )
   })
 }
 
 /** Delete the entire roadmap tree for a goal. */
-export async function deleteRoadmapTree(goalId: string): Promise<void> {
+export async function deleteRoadmapTree(userId: string, goalId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM roadmap_nodes WHERE goal_id = $1", [goalId])
+    await client.query("DELETE FROM roadmap_nodes WHERE goal_id = $1 AND user_id = $2", [goalId, userId])
   })
 }
 
 /** Delete ALL roadmap nodes (testing / cleanup). */
-export async function deleteAllRoadmapNodes(): Promise<void> {
+export async function deleteAllRoadmapNodes(userId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM roadmap_nodes")
+    await client.query("DELETE FROM roadmap_nodes WHERE user_id = $1", [userId])
   })
 }
 
 /** Get a single roadmap node by ID (with children populated). */
-export async function getRoadmapNodeById(nodeId: string): Promise<RoadmapNode | null> {
+export async function getRoadmapNodeById(userId: string, nodeId: string): Promise<RoadmapNode | null> {
   return withDb(async (client) => {
-    const { rows } = await client.query("SELECT * FROM roadmap_nodes WHERE id = $1", [nodeId])
+    const { rows } = await client.query("SELECT * FROM roadmap_nodes WHERE id = $1 AND user_id = $2", [nodeId, userId])
     if (rows.length === 0) return null
     const node = nodeFromRow(rows[0])
     node.children = await getNodeChildren(client, nodeId)
@@ -266,11 +295,11 @@ export async function getRoadmapNodeById(nodeId: string): Promise<RoadmapNode | 
 }
 
 /** Get roadmap node count for a goal. */
-export async function getRoadmapNodeCount(goalId: string): Promise<number> {
+export async function getRoadmapNodeCount(userId: string, goalId: string): Promise<number> {
   return withDb(async (client) => {
     const { rows } = await client.query(
-      "SELECT COUNT(*) AS count FROM roadmap_nodes WHERE goal_id = $1",
-      [goalId],
+      "SELECT COUNT(*) AS count FROM roadmap_nodes WHERE goal_id = $1 AND user_id = $2",
+      [goalId, userId],
     )
     return parseInt(rows[0].count as string, 10)
   })

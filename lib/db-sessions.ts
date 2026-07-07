@@ -13,13 +13,13 @@ import { notifyDatabaseChange } from "@/lib/db-events"
  * Create a new session in the database.
  * Returns the created session with its generated ID.
  */
-export async function createSession(input: Omit<Session, "id">): Promise<Session> {
+export async function createSession(userId: string, input: Omit<Session, "id">): Promise<Session> {
   return withDb(async (client) => {
     const result = await client.query(
       `INSERT INTO sessions (
         task_id, task_name, tags, duration, duration_formatted,
-        started_at, ended_at, date, pomodoro_count, productivity_rating
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        started_at, ended_at, date, pomodoro_count, productivity_rating, user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *`,
       [
         input.taskId || null,
@@ -32,6 +32,7 @@ export async function createSession(input: Omit<Session, "id">): Promise<Session
         input.date,
         input.pomodoroCount || 0,
         input.productivityRating || null,
+        userId,
       ]
     )
     
@@ -56,11 +57,11 @@ export async function createSession(input: Omit<Session, "id">): Promise<Session
  * Get a session by ID.
  * Returns null if not found.
  */
-export async function getSessionById(id: string): Promise<Session | null> {
+export async function getSessionById(userId: string, id: string): Promise<Session | null> {
   return withDb(async (client) => {
     const result = await client.query(
-      "SELECT * FROM sessions WHERE id = $1",
-      [id]
+      "SELECT * FROM sessions WHERE id = $1 AND user_id = $2",
+      [id, userId]
     )
     
     if (result.rows.length === 0) return null
@@ -86,7 +87,7 @@ export async function getSessionById(id: string): Promise<Session | null> {
  * Get all sessions, ordered by started_at descending (newest first).
  * Supports pagination with limit and offset.
  */
-export async function getAllSessions(options?: {
+export async function getAllSessions(userId: string, options?: {
   limit?: number;
   offset?: number;
 }): Promise<{ sessions: Session[]; total: number }> {
@@ -95,13 +96,13 @@ export async function getAllSessions(options?: {
     const offset = options?.offset || 0
     
     // Get total count
-    const countResult = await client.query("SELECT COUNT(*) as count FROM sessions")
+    const countResult = await client.query("SELECT COUNT(*) as count FROM sessions WHERE user_id = $1", [userId])
     const total = parseInt(countResult.rows[0].count, 10)
     
     // Get paginated sessions
     const result = await client.query(
-      "SELECT * FROM sessions ORDER BY started_at DESC LIMIT $1 OFFSET $2",
-      [limit, offset]
+      "SELECT * FROM sessions WHERE user_id = $1 ORDER BY started_at DESC LIMIT $2 OFFSET $3",
+      [userId, limit, offset]
     )
     
     const sessions = result.rows.map((row) => ({
@@ -125,11 +126,11 @@ export async function getAllSessions(options?: {
 /**
  * Get sessions for a specific date.
  */
-export async function getSessionsByDate(date: string): Promise<Session[]> {
+export async function getSessionsByDate(userId: string, date: string): Promise<Session[]> {
   return withDb(async (client) => {
     const result = await client.query(
-      "SELECT * FROM sessions WHERE date = $1 ORDER BY started_at DESC",
-      [date]
+      "SELECT * FROM sessions WHERE user_id = $1 AND date = $2 ORDER BY started_at DESC",
+      [userId, date]
     )
     
     return result.rows.map((row) => ({
@@ -151,11 +152,11 @@ export async function getSessionsByDate(date: string): Promise<Session[]> {
 /**
  * Get sessions within a date range (inclusive).
  */
-export async function getSessionsByDateRange(startDate: string, endDate: string): Promise<Session[]> {
+export async function getSessionsByDateRange(userId: string, startDate: string, endDate: string): Promise<Session[]> {
   return withDb(async (client) => {
     const result = await client.query(
-      "SELECT * FROM sessions WHERE date >= $1 AND date <= $2 ORDER BY started_at DESC",
-      [startDate, endDate]
+      "SELECT * FROM sessions WHERE user_id = $1 AND date >= $2 AND date <= $3 ORDER BY started_at DESC",
+      [userId, startDate, endDate]
     )
     
     return result.rows.map((row) => ({
@@ -177,12 +178,12 @@ export async function getSessionsByDateRange(startDate: string, endDate: string)
 /**
  * Get sessions that contain specific tags.
  */
-export async function getSessionsByTags(tags: string[]): Promise<Session[]> {
+export async function getSessionsByTags(userId: string, tags: string[]): Promise<Session[]> {
   return withDb(async (client) => {
     // Use PostgreSQL array overlap operator &&
     const result = await client.query(
-      "SELECT * FROM sessions WHERE tags && $1 ORDER BY started_at DESC",
-      [tags]
+      "SELECT * FROM sessions WHERE user_id = $1 AND tags && $2 ORDER BY started_at DESC",
+      [userId, tags]
     )
     
     return result.rows.map((row) => ({
@@ -204,11 +205,11 @@ export async function getSessionsByTags(tags: string[]): Promise<Session[]> {
 /**
  * Update a session's productivity rating.
  */
-export async function updateSessionRating(id: string, rating: number): Promise<void> {
+export async function updateSessionRating(userId: string, id: string, rating: number): Promise<void> {
   return withDb(async (client) => {
     await client.query(
-      "UPDATE sessions SET productivity_rating = $1 WHERE id = $2",
-      [rating, id]
+      "UPDATE sessions SET productivity_rating = $1 WHERE id = $2 AND user_id = $3",
+      [rating, id, userId]
     )
   })
 }
@@ -217,12 +218,12 @@ export async function updateSessionRating(id: string, rating: number): Promise<v
  * Delete a session by ID.
  * Also cleans up any linked task reference.
  */
-export async function deleteSession(id: string): Promise<void> {
+export async function deleteSession(userId: string, id: string): Promise<void> {
   return withDb(async (client) => {
     // Get the session first to find linked task
     const sessionResult = await client.query(
-      "SELECT task_id FROM sessions WHERE id = $1",
-      [id]
+      "SELECT task_id FROM sessions WHERE id = $1 AND user_id = $2",
+      [id, userId]
     )
     
     if (sessionResult.rows.length === 0) return
@@ -230,7 +231,7 @@ export async function deleteSession(id: string): Promise<void> {
     const taskId = sessionResult.rows[0].task_id
     
     // Delete the session
-    await client.query("DELETE FROM sessions WHERE id = $1", [id])
+    await client.query("DELETE FROM sessions WHERE id = $1 AND user_id = $2", [id, userId])
     
     // Clean up dangling task.session_id reference
     if (taskId) {
@@ -245,18 +246,18 @@ export async function deleteSession(id: string): Promise<void> {
 /**
  * Delete all sessions (used for data reset).
  */
-export async function deleteAllSessions(): Promise<void> {
+export async function deleteAllSessions(userId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM sessions")
+    await client.query("DELETE FROM sessions WHERE user_id = $1", [userId])
   })
 }
 
 /**
  * Get session count for analytics.
  */
-export async function getSessionCount(): Promise<number> {
+export async function getSessionCount(userId: string): Promise<number> {
   return withDb(async (client) => {
-    const result = await client.query("SELECT COUNT(*) as count FROM sessions")
+    const result = await client.query("SELECT COUNT(*) as count FROM sessions WHERE user_id = $1", [userId])
     return parseInt(result.rows[0].count, 10)
   })
 }
@@ -264,9 +265,9 @@ export async function getSessionCount(): Promise<number> {
 /**
  * Get total focus time (sum of all session durations) in seconds.
  */
-export async function getTotalFocusTime(): Promise<number> {
+export async function getTotalFocusTime(userId: string): Promise<number> {
   return withDb(async (client) => {
-    const result = await client.query("SELECT COALESCE(SUM(duration), 0) as total FROM sessions")
+    const result = await client.query("SELECT COALESCE(SUM(duration), 0) as total FROM sessions WHERE user_id = $1", [userId])
     notifyDatabaseChange()
     return parseInt(result.rows[0].total, 10)
   })

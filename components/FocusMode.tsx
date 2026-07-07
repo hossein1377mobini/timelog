@@ -33,11 +33,12 @@ function formatMMSS(seconds: number) {
 export default function FocusMode() {
   const timer = useFocusTimer();
   const interruptions = useFocusInterruptions();
+  const { interruptStartRef, setShowInterrupt } = interruptions;
 
   function openInterruptDialog() {
     timer.clearTimer();
-    interruptions.interruptStartRef.current = Date.now();
-    interruptions.setShowInterrupt(true);
+    interruptStartRef.current = Date.now();
+    setShowInterrupt(true);
   }
 
   function saveInterruption() {
@@ -196,7 +197,7 @@ export default function FocusMode() {
           {interruptions.localInterruptions.length > 0 && (
             <div className="space-y-1.5 pt-1 border-t border-[hsl(var(--hairline))]">
               <p className="text-[10px] uppercase tracking-[0.08em] text-[hsl(var(--muted))] font-semibold pt-1">
-                Today's interruptions
+                Today{'\u2019'}s interruptions
               </p>
               {interruptions.localInterruptions.slice(0, 3).map((item) => {
                 const t = INTERRUPTION_TYPES.find(

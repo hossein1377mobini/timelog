@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getSession } from "@/lib/auth"
 import {
   getAllGoals,
   createGoal,
@@ -16,6 +17,8 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const statusFilter = searchParams.get("status")
     const limit = searchParams.get("limit")
@@ -30,7 +33,7 @@ export async function GET(request: NextRequest) {
     if (limit !== null) options.limit = parseInt(limit, 10)
     if (offset !== null) options.offset = parseInt(offset, 10)
 
-    const result = await getAllGoals(options)
+    const result = await getAllGoals(session.sub, options)
     return NextResponse.json(result)
   } catch (error) {
     console.error("GET /api/goals error:", error)
@@ -48,9 +51,11 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: Request) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const body = await request.json()
-    const goal = await createGoal(body)
-    return NextResponse.json(goal, { status: 201 })
+    const newGoal = await createGoal(session.sub, body)
+    return NextResponse.json(newGoal, { status: 201 })
   } catch (error) {
     console.error("POST /api/goals error:", error)
     return NextResponse.json(
@@ -70,6 +75,8 @@ export async function POST(request: Request) {
  */
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
 
@@ -81,7 +88,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const updatedGoal = await updateGoal(id, body)
+    const updatedGoal = await updateGoal(session.sub, id, body)
     return NextResponse.json(updatedGoal)
   } catch (error) {
     console.error("PATCH /api/goals error:", error)
@@ -100,6 +107,8 @@ export async function PATCH(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
 
@@ -110,7 +119,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await deleteGoal(id)
+    await deleteGoal(session.sub, id)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("DELETE /api/goals error:", error)

@@ -13,13 +13,13 @@ import { notifyDatabaseChange } from "@/lib/db-events"
  * Create a new goal in the database.
  * Returns the created goal with its generated ID.
  */
-export async function createGoal(input: Omit<Goal, "id" | "createdAt" | "updatedAt" | "roadmap">): Promise<Goal> {
+export async function createGoal(userId: string, input: Omit<Goal, "id" | "createdAt" | "updatedAt" | "roadmap">): Promise<Goal> {
   return withDb(async (client) => {
     const result = await client.query(
       `INSERT INTO goals (
         name, description, category, tag, target_hours, target_date, weekly_target,
-        priority, status, color
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        priority, status, color, user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *`,
       [
         input.name,
@@ -32,6 +32,7 @@ export async function createGoal(input: Omit<Goal, "id" | "createdAt" | "updated
         input.priority,
         input.status,
         input.color,
+        userId,
       ]
     )
     
@@ -58,11 +59,11 @@ export async function createGoal(input: Omit<Goal, "id" | "createdAt" | "updated
 /**
  * Get a goal by ID.
  */
-export async function getGoalById(id: string): Promise<Goal | null> {
+export async function getGoalById(userId: string, id: string): Promise<Goal | null> {
   return withDb(async (client) => {
     const result = await client.query(
-      "SELECT * FROM goals WHERE id = $1",
-      [id]
+      "SELECT * FROM goals WHERE id = $1 AND user_id = $2",
+      [id, userId]
     )
     
     if (result.rows.length === 0) {
@@ -94,7 +95,7 @@ export async function getGoalById(id: string): Promise<Goal | null> {
  * Can optionally filter by status.
  * Supports pagination with limit and offset.
  */
-export async function getAllGoals(options?: {
+export async function getAllGoals(userId: string, options?: {
   statusFilter?: string;
   limit?: number;
   offset?: number;
@@ -104,14 +105,16 @@ export async function getAllGoals(options?: {
     const offset = options?.offset || 0
     const statusFilter = options?.statusFilter
     
-    let countQuery = "SELECT COUNT(*) as count FROM goals"
-    let query = "SELECT * FROM goals"
-    const params: any[] = []
-    const countParams: any[] = []
+    let countQuery = "SELECT COUNT(*) as count FROM goals WHERE user_id = $1"
+    let query = "SELECT * FROM goals WHERE user_id = $1"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const params: any[] = [userId]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const countParams: any[] = [userId]
     
     if (statusFilter) {
-      countQuery += " WHERE status = $1"
-      query += " WHERE status = $1"
+      countQuery += " AND status = $2"
+      query += " AND status = $2"
       params.push(statusFilter)
       countParams.push(statusFilter)
     }
@@ -150,11 +153,11 @@ export async function getAllGoals(options?: {
 /**
  * Get goals by category.
  */
-export async function getGoalsByCategory(category: string): Promise<Goal[]> {
+export async function getGoalsByCategory(userId: string, category: string): Promise<Goal[]> {
   return withDb(async (client) => {
     const result = await client.query(
-      "SELECT * FROM goals WHERE category = $1 ORDER BY created_at DESC",
-      [category]
+      "SELECT * FROM goals WHERE user_id = $1 AND category = $2 ORDER BY created_at DESC",
+      [userId, category]
     )
     
     return result.rows.map((row) => ({
@@ -179,11 +182,11 @@ export async function getGoalsByCategory(category: string): Promise<Goal[]> {
 /**
  * Get goals by status.
  */
-export async function getGoalsByStatus(status: string): Promise<Goal[]> {
+export async function getGoalsByStatus(userId: string, status: string): Promise<Goal[]> {
   return withDb(async (client) => {
     const result = await client.query(
-      "SELECT * FROM goals WHERE status = $1 ORDER BY created_at DESC",
-      [status]
+      "SELECT * FROM goals WHERE user_id = $1 AND status = $2 ORDER BY created_at DESC",
+      [userId, status]
     )
     
     return result.rows.map((row) => ({
@@ -209,10 +212,11 @@ export async function getGoalsByStatus(status: string): Promise<Goal[]> {
  * Update a goal by ID.
  * Returns the updated goal.
  */
-export async function updateGoal(id: string, updates: Partial<Omit<Goal, "id" | "createdAt" | "updatedAt" | "roadmap">>): Promise<Goal> {
+export async function updateGoal(userId: string, id: string, updates: Partial<Omit<Goal, "id" | "createdAt" | "updatedAt" | "roadmap">>): Promise<Goal> {
   return withDb(async (client) => {
     // Build dynamic update query
     const setClauses: string[] = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const values: any[] = []
     let paramCount = 1
 
@@ -262,13 +266,14 @@ export async function updateGoal(id: string, updates: Partial<Omit<Goal, "id" | 
 
     if (setClauses.length === 1) {
       // Only updated_at change, just return current goal
-      const goal = await getGoalById(id)
+      const goal = await getGoalById(userId, id)
       if (!goal) throw new Error(`Goal not found: ${id}`)
       return goal
     }
 
     values.push(id)
-    const query = `UPDATE goals SET ${setClauses.join(", ")} WHERE id = $${paramCount} RETURNING *`
+    values.push(userId)
+    const query = `UPDATE goals SET ${setClauses.join(", ")} WHERE id = $${paramCount} AND user_id = $${paramCount + 1} RETURNING *`
 
     const result = await client.query(query, values)
     
@@ -300,24 +305,25 @@ export async function updateGoal(id: string, updates: Partial<Omit<Goal, "id" | 
  * Delete a goal by ID.
  * CASCADE DELETE: Also deletes all related weekly_objectives, tasks, roadmap_phases, and roadmap_nodes.
  */
-export async function deleteGoal(id: string): Promise<void> {
+export async function deleteGoal(userId: string, id: string): Promise<void> {
   return withDb(async (client) => {
     // The database schema has CASCADE DELETE constraints, so this will automatically
     // delete related records in weekly_objectives, tasks, roadmap_phases, and roadmap_nodes
-    await client.query("DELETE FROM goals WHERE id = $1", [id])
+    await client.query("DELETE FROM goals WHERE id = $1 AND user_id = $2", [id, userId])
   })
 }
 
 /**
  * Get goal count for analytics.
  */
-export async function getGoalCount(statusFilter?: string): Promise<number> {
+export async function getGoalCount(userId: string, statusFilter?: string): Promise<number> {
   return withDb(async (client) => {
-    let query = "SELECT COUNT(*) as count FROM goals"
-    const params: any[] = []
+    let query = "SELECT COUNT(*) as count FROM goals WHERE user_id = $1"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const params: any[] = [userId]
     
     if (statusFilter) {
-      query += " WHERE status = $1"
+      query += " AND status = $2"
       params.push(statusFilter)
     }
     
@@ -329,10 +335,11 @@ export async function getGoalCount(statusFilter?: string): Promise<number> {
 /**
  * Get goal count by status for analytics.
  */
-export async function getGoalCountByStatus(): Promise<Record<string, number>> {
+export async function getGoalCountByStatus(userId: string): Promise<Record<string, number>> {
   return withDb(async (client) => {
     const result = await client.query(
-      "SELECT status, COUNT(*) as count FROM goals GROUP BY status"
+      "SELECT status, COUNT(*) as count FROM goals WHERE user_id = $1 GROUP BY status",
+      [userId]
     )
     
     const counts: Record<string, number> = {}
@@ -346,9 +353,9 @@ export async function getGoalCountByStatus(): Promise<Record<string, number>> {
 /**
  * Delete all goals (used for testing/data reset).
  */
-export async function deleteAllGoals(): Promise<void> {
+export async function deleteAllGoals(userId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM goals")
+    await client.query("DELETE FROM goals WHERE user_id = $1", [userId])
     notifyDatabaseChange()
   })
 }

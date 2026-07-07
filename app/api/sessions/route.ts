@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getSession } from "@/lib/auth"
 import {
   getAllSessions,
   createSession,
@@ -16,13 +17,15 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date")
     const limit = searchParams.get("limit")
     const offset = searchParams.get("offset")
 
     if (date) {
-      const sessions = await getSessionsByDate(date)
+      const sessions = await getSessionsByDate(session.sub, date)
       return NextResponse.json({ sessions })
     }
 
@@ -30,7 +33,7 @@ export async function GET(request: NextRequest) {
     if (limit !== null) options.limit = parseInt(limit, 10)
     if (offset !== null) options.offset = parseInt(offset, 10)
 
-    const result = await getAllSessions(options)
+    const result = await getAllSessions(session.sub, options)
     return NextResponse.json(result)
   } catch (error) {
     console.error("GET /api/sessions error:", error)
@@ -48,9 +51,11 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: Request) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const body = await request.json()
-    const session = await createSession(body)
-    return NextResponse.json(session, { status: 201 })
+    const newSession = await createSession(session.sub, body)
+    return NextResponse.json(newSession, { status: 201 })
   } catch (error) {
     console.error("POST /api/sessions error:", error)
     return NextResponse.json(
@@ -68,6 +73,8 @@ export async function POST(request: Request) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
 
@@ -78,7 +85,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await deleteSession(id)
+    await deleteSession(session.sub, id)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("DELETE /api/sessions error:", error)

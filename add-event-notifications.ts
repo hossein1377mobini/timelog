@@ -4,7 +4,6 @@
  */
 
 import * as fs from 'fs'
-import * as path from 'path'
 
 const DB_FILES = [
   'lib/db-settings.ts',

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getSession } from "@/lib/auth"
 import {
   getSetting,
   setSetting,
@@ -14,15 +15,17 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const key = searchParams.get("key")
 
     if (key) {
-      const value = await getSetting(key)
+      const value = await getSetting(session.sub, key)
       return NextResponse.json({ key, value })
     }
 
-    const settings = await getAllSettings()
+    const settings = await getAllSettings(session.sub)
     return NextResponse.json({ settings })
   } catch (error) {
     console.error("GET /api/settings error:", error)
@@ -40,6 +43,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: Request) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const body = await request.json()
 
     if (!body.key || typeof body.key !== "string") {
@@ -56,7 +61,7 @@ export async function POST(request: Request) {
       )
     }
 
-    await setSetting(body.key, body.value)
+    await setSetting(session.sub, body.key, body.value)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("POST /api/settings error:", error)

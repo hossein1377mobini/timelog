@@ -19,15 +19,22 @@ function useApiData<T>(fetcher: () => Promise<T>): { data: T | null; loading: bo
   const [error, setError] = useState<Error | null>(null)
 
   const fetch = useCallback(() => {
-    setLoading(true)
-    setError(null)
-    fetcher()
-      .then(setData)
-      .catch(setError)
-      .finally(() => setLoading(false))
+    const doFetch = async () => {
+      try {
+        const result = await fetcher()
+        setData(result)
+      } catch (e) {
+        setError(e as Error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    doFetch()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { fetch() }, [fetch])
+  useEffect(() => {
+    Promise.resolve().then(() => fetch())
+  }, [fetch])
 
   return { data, loading, error, refetch: fetch }
 }

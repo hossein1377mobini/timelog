@@ -13,12 +13,12 @@ import { notifyDatabaseChange } from "@/lib/db-events"
  * Create a new reflection in the database.
  * Returns the created reflection with its generated ID.
  */
-export async function createReflection(input: Omit<Reflection, "id" | "createdAt">): Promise<Reflection> {
+export async function createReflection(userId: string, input: Omit<Reflection, "id" | "createdAt">): Promise<Reflection> {
   return withDb(async (client) => {
     const result = await client.query(
       `INSERT INTO reflections (
-        date, mood, accomplishments, challenges, improvements, rating, wins, tomorrow_plan, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        date, mood, accomplishments, challenges, improvements, rating, wins, tomorrow_plan, notes, user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *`,
       [
         input.date,
@@ -30,6 +30,7 @@ export async function createReflection(input: Omit<Reflection, "id" | "createdAt
         input.wins,
         input.tomorrowPlan,
         input.notes,
+        userId,
       ]
     )
     
@@ -54,11 +55,11 @@ export async function createReflection(input: Omit<Reflection, "id" | "createdAt
  * Get a reflection by date.
  * Returns null if no reflection exists for the given date.
  */
-export async function getReflectionByDate(date: string): Promise<Reflection | null> {
+export async function getReflectionByDate(userId: string, date: string): Promise<Reflection | null> {
   return withDb(async (client) => {
     const result = await client.query(
-      "SELECT * FROM reflections WHERE date = $1",
-      [date]
+      "SELECT * FROM reflections WHERE user_id = $1 AND date = $2",
+      [userId, date]
     )
     
     if (result.rows.length === 0) {
@@ -86,7 +87,7 @@ export async function getReflectionByDate(date: string): Promise<Reflection | nu
  * Get all reflections, ordered by date descending (newest first).
  * Supports pagination with limit and offset.
  */
-export async function getAllReflections(options?: {
+export async function getAllReflections(userId: string, options?: {
   limit?: number;
   offset?: number;
 }): Promise<{ reflections: Reflection[]; total: number }> {
@@ -95,13 +96,13 @@ export async function getAllReflections(options?: {
     const offset = options?.offset || 0
     
     // Get total count
-    const countResult = await client.query("SELECT COUNT(*) as count FROM reflections")
+    const countResult = await client.query("SELECT COUNT(*) as count FROM reflections WHERE user_id = $1", [userId])
     const total = parseInt(countResult.rows[0].count, 10)
     
     // Get paginated reflections
     const result = await client.query(
-      "SELECT * FROM reflections ORDER BY date DESC LIMIT $1 OFFSET $2",
-      [limit, offset]
+      "SELECT * FROM reflections WHERE user_id = $1 ORDER BY date DESC LIMIT $2 OFFSET $3",
+      [userId, limit, offset]
     )
     
     const reflections = result.rows.map((row) => ({
@@ -126,13 +127,13 @@ export async function getAllReflections(options?: {
  * Upsert a reflection: create if doesn't exist, update if it does (by date).
  * Returns the created or updated reflection.
  */
-export async function upsertReflection(input: Omit<Reflection, "id" | "createdAt">): Promise<Reflection> {
+export async function upsertReflection(userId: string, input: Omit<Reflection, "id" | "createdAt">): Promise<Reflection> {
   return withDb(async (client) => {
     const result = await client.query(
       `INSERT INTO reflections (
-        date, mood, accomplishments, challenges, improvements, rating, wins, tomorrow_plan, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT (date) DO UPDATE SET
+        date, mood, accomplishments, challenges, improvements, rating, wins, tomorrow_plan, notes, user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ON CONFLICT (user_id, date) DO UPDATE SET
         mood = EXCLUDED.mood,
         accomplishments = EXCLUDED.accomplishments,
         challenges = EXCLUDED.challenges,
@@ -152,6 +153,7 @@ export async function upsertReflection(input: Omit<Reflection, "id" | "createdAt
         input.wins,
         input.tomorrowPlan,
         input.notes,
+        userId,
       ]
     )
     
@@ -175,27 +177,27 @@ export async function upsertReflection(input: Omit<Reflection, "id" | "createdAt
 /**
  * Delete a reflection by date.
  */
-export async function deleteReflectionByDate(date: string): Promise<void> {
+export async function deleteReflectionByDate(userId: string, date: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM reflections WHERE date = $1", [date])
+    await client.query("DELETE FROM reflections WHERE user_id = $1 AND date = $2", [userId, date])
   })
 }
 
 /**
  * Delete all reflections (used for testing/data reset).
  */
-export async function deleteAllReflections(): Promise<void> {
+export async function deleteAllReflections(userId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM reflections")
+    await client.query("DELETE FROM reflections WHERE user_id = $1", [userId])
   })
 }
 
 /**
  * Get reflection count for analytics.
  */
-export async function getReflectionCount(): Promise<number> {
+export async function getReflectionCount(userId: string): Promise<number> {
   return withDb(async (client) => {
-    const result = await client.query("SELECT COUNT(*) as count FROM reflections")
+    const result = await client.query("SELECT COUNT(*) as count FROM reflections WHERE user_id = $1", [userId])
     return parseInt(result.rows[0].count, 10)
   })
 }
@@ -203,11 +205,11 @@ export async function getReflectionCount(): Promise<number> {
 /**
  * Get reflections within a date range.
  */
-export async function getReflectionsByDateRange(startDate: string, endDate: string): Promise<Reflection[]> {
+export async function getReflectionsByDateRange(userId: string, startDate: string, endDate: string): Promise<Reflection[]> {
   return withDb(async (client) => {
     const result = await client.query(
-      "SELECT * FROM reflections WHERE date >= $1 AND date <= $2 ORDER BY date DESC",
-      [startDate, endDate]
+      "SELECT * FROM reflections WHERE user_id = $1 AND date >= $2 AND date <= $3 ORDER BY date DESC",
+      [userId, startDate, endDate]
     )
     
     notifyDatabaseChange()

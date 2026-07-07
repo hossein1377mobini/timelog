@@ -1,6 +1,7 @@
 "use server";
 
 import { isOnboardingDoneAsync, setOnboardingDoneAsync } from "@/lib/storage-server";
+import { getSession } from "@/lib/auth";
 
 /**
  * Server action to check if onboarding is complete.
@@ -9,7 +10,9 @@ import { isOnboardingDoneAsync, setOnboardingDoneAsync } from "@/lib/storage-ser
  */
 export async function checkOnboardingAction(): Promise<boolean> {
   try {
-    return await isOnboardingDoneAsync();
+    const session = await getSession();
+    if (!session) return false;
+    return await isOnboardingDoneAsync(session.sub);
   } catch (error) {
     console.error('Failed to check onboarding status:', error);
     return false;
@@ -23,7 +26,9 @@ export async function checkOnboardingAction(): Promise<boolean> {
  */
 export async function completeOnboardingAction(): Promise<void> {
   try {
-    await setOnboardingDoneAsync();
+    const session = await getSession();
+    if (!session) throw new Error('Not authenticated');
+    await setOnboardingDoneAsync(session.sub);
   } catch (error) {
     console.error('Failed to complete onboarding:', error);
     throw new Error(

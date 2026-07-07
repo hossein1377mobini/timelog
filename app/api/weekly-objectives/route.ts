@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getSession } from "@/lib/auth"
 import {
   getAllWeeklyObjectives,
   getWeeklyObjectivesByWeek,
@@ -17,13 +18,15 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const weekStart = searchParams.get("weekStart")
     const limit = searchParams.get("limit")
     const offset = searchParams.get("offset")
 
     if (weekStart) {
-      const objectives = await getWeeklyObjectivesByWeek(weekStart)
+      const objectives = await getWeeklyObjectivesByWeek(session.sub, weekStart)
       return NextResponse.json({ objectives })
     }
 
@@ -31,7 +34,7 @@ export async function GET(request: NextRequest) {
     if (limit !== null) options.limit = parseInt(limit, 10)
     if (offset !== null) options.offset = parseInt(offset, 10)
 
-    const objectives = await getAllWeeklyObjectives(options)
+    const objectives = await getAllWeeklyObjectives(session.sub, options)
     return NextResponse.json({ objectives })
   } catch (error) {
     console.error("GET /api/weekly-objectives error:", error)
@@ -49,9 +52,11 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: Request) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const body = await request.json()
-    const objective = await createWeeklyObjective(body)
-    return NextResponse.json(objective, { status: 201 })
+    const newObjective = await createWeeklyObjective(session.sub, body)
+    return NextResponse.json(newObjective, { status: 201 })
   } catch (error) {
     console.error("POST /api/weekly-objectives error:", error)
     return NextResponse.json(
@@ -71,6 +76,8 @@ export async function POST(request: Request) {
  */
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
 
@@ -82,7 +89,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const updatedObjective = await updateWeeklyObjective(id, body)
+    const updatedObjective = await updateWeeklyObjective(session.sub, id, body)
     return NextResponse.json(updatedObjective)
   } catch (error) {
     console.error("PATCH /api/weekly-objectives error:", error)
@@ -101,6 +108,8 @@ export async function PATCH(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
 
@@ -111,7 +120,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await deleteWeeklyObjective(id)
+    await deleteWeeklyObjective(session.sub, id)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("DELETE /api/weekly-objectives error:", error)

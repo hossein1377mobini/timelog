@@ -9,6 +9,7 @@ import type { Goal, Phase } from "@/lib/types"
 function generateId(): string {
   // prefer crypto.randomUUID when available
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const c = (globalThis as any).crypto
     if (c && typeof c.randomUUID === "function") return c.randomUUID()
   } catch (e) {

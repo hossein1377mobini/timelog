@@ -3,6 +3,7 @@
  * 
  * This module provides async wrapper functions that call database modules.
  * These functions should only be used in server components, API routes, or server actions.
+ * All functions require a userId as the first parameter for user-scoped access.
  * 
  * For client components, use the synchronous functions from lib/storage.ts which
  * still use localStorage for backward compatibility.
@@ -22,14 +23,14 @@ const KEYS = {
 } as const
 
 /** Check whether the user has completed the onboarding flow (async, database-backed). */
-export async function isOnboardingDoneAsync(): Promise<boolean> {
-  const value = await getSetting(KEYS.ONBOARDING_DONE)
+export async function isOnboardingDoneAsync(userId: string): Promise<boolean> {
+  const value = await getSetting(userId, KEYS.ONBOARDING_DONE)
   return value === "true"
 }
 
 /** Mark the onboarding flow as completed (async, database-backed). */
-export async function setOnboardingDoneAsync(): Promise<void> {
-  await setSetting(KEYS.ONBOARDING_DONE, "true")
+export async function setOnboardingDoneAsync(userId: string): Promise<void> {
+  await setSetting(userId, KEYS.ONBOARDING_DONE, "true")
 }
 
 // ── Sessions (Database) ────────────────────────────────────────────────────
@@ -45,34 +46,34 @@ import {
 } from "@/lib/db-sessions"
 
 /** Return all focus sessions from database (async). */
-export async function getSessionsAsync(): Promise<Session[]> {
-  const { sessions } = await dbGetAllSessions()
+export async function getSessionsAsync(userId: string): Promise<Session[]> {
+  const { sessions } = await dbGetAllSessions(userId)
   return sessions
 }
 
 /** Persist a new session to database and return it with its generated ID (async). */
-export async function addSessionAsync(input: Omit<Session, "id">): Promise<Session> {
-  return await dbCreateSession(input)
+export async function addSessionAsync(userId: string, input: Omit<Session, "id">): Promise<Session> {
+  return await dbCreateSession(userId, input)
 }
 
 /** Remove a single session by ID from database (async). */
-export async function deleteSessionAsync(id: string): Promise<void> {
-  await dbDeleteSession(id)
+export async function deleteSessionAsync(userId: string, id: string): Promise<void> {
+  await dbDeleteSession(userId, id)
 }
 
 /** Remove all sessions from database (async). */
-export async function clearSessionsAsync(): Promise<void> {
-  await dbDeleteAllSessions()
+export async function clearSessionsAsync(userId: string): Promise<void> {
+  await dbDeleteAllSessions(userId)
 }
 
 /** Get sessions for a specific date from database (async). */
-export async function getSessionsByDateAsync(date: string): Promise<Session[]> {
-  return await dbGetSessionsByDate(date)
+export async function getSessionsByDateAsync(userId: string, date: string): Promise<Session[]> {
+  return await dbGetSessionsByDate(userId, date)
 }
 
 /** Get sessions within a date range from database (async). */
-export async function getSessionsByDateRangeAsync(startDate: string, endDate: string): Promise<Session[]> {
-  return await dbGetSessionsByDateRange(startDate, endDate)
+export async function getSessionsByDateRangeAsync(userId: string, startDate: string, endDate: string): Promise<Session[]> {
+  return await dbGetSessionsByDateRange(userId, startDate, endDate)
 }
 
 // ── Interruptions (Database) ───────────────────────────────────────────────
@@ -86,19 +87,19 @@ import {
 } from "@/lib/db-interruptions"
 
 /** Return all interruptions from database (async). */
-export async function getInterruptionsAsync(): Promise<Interruption[]> {
-  const { interruptions } = await dbGetAllInterruptions()
+export async function getInterruptionsAsync(userId: string): Promise<Interruption[]> {
+  const { interruptions } = await dbGetAllInterruptions(userId)
   return interruptions
 }
 
 /** Persist a new interruption to database and return it with its generated ID (async). */
-export async function addInterruptionAsync(input: Omit<Interruption, "id">): Promise<Interruption> {
-  return await dbCreateInterruption(input)
+export async function addInterruptionAsync(userId: string, input: Omit<Interruption, "id">): Promise<Interruption> {
+  return await dbCreateInterruption(userId, input)
 }
 
 /** Get interruptions for a specific session from database (async). */
-export async function getInterruptionsBySessionAsync(sessionId: string): Promise<Interruption[]> {
-  return await dbGetInterruptionsBySession(sessionId)
+export async function getInterruptionsBySessionAsync(userId: string, sessionId: string): Promise<Interruption[]> {
+  return await dbGetInterruptionsBySession(userId, sessionId)
 }
 
 // ── Goals (Database Async) ─────────────────────────────────────────────────
@@ -113,34 +114,34 @@ import {
 } from "./db-goals"
 
 /** Return all goals from database (async). */
-export async function getGoalsAsync(): Promise<Goal[]> {
-  const { goals } = await dbGetAllGoals()
+export async function getGoalsAsync(userId: string): Promise<Goal[]> {
+  const { goals } = await dbGetAllGoals(userId)
   return goals
 }
 
 /** Create a new goal in database and return it with its generated ID (async). */
-export async function addGoalAsync(input: Omit<Goal, "id" | "roadmap" | "createdAt" | "updatedAt">): Promise<Goal> {
-  return await dbCreateGoal(input)
+export async function addGoalAsync(userId: string, input: Omit<Goal, "id" | "roadmap" | "createdAt" | "updatedAt">): Promise<Goal> {
+  return await dbCreateGoal(userId, input)
 }
 
 /** Get a goal by ID from database (async). */
-export async function getGoalByIdAsync(id: string): Promise<Goal | null> {
-  return await dbGetGoalById(id)
+export async function getGoalByIdAsync(userId: string, id: string): Promise<Goal | null> {
+  return await dbGetGoalById(userId, id)
 }
 
 /** Update a goal by ID in database (async). */
-export async function updateGoalAsync(id: string, updates: Partial<Omit<Goal, "id" | "createdAt" | "updatedAt" | "roadmap">>): Promise<Goal> {
-  return await dbUpdateGoal(id, updates)
+export async function updateGoalAsync(userId: string, id: string, updates: Partial<Omit<Goal, "id" | "createdAt" | "updatedAt" | "roadmap">>): Promise<Goal> {
+  return await dbUpdateGoal(userId, id, updates)
 }
 
 /** Delete a goal by ID from database (async). CASCADE DELETE handles related records. */
-export async function deleteGoalAsync(id: string): Promise<void> {
-  await dbDeleteGoal(id)
+export async function deleteGoalAsync(userId: string, id: string): Promise<void> {
+  await dbDeleteGoal(userId, id)
 }
 
 /** Get goal count from database (async). */
-export async function getGoalCountAsync(): Promise<number> {
-  return await dbGetGoalCount()
+export async function getGoalCountAsync(userId: string, statusFilter?: string): Promise<number> {
+  return await dbGetGoalCount(userId, statusFilter)
 }
 
 // ── Reflections (Database Async) ──────────────────────────────────────────
@@ -157,34 +158,34 @@ import {
 } from "./db-reflections"
 
 /** Return all reflections from database (async). */
-export async function getReflectionsAsync(): Promise<Reflection[]> {
-  const { reflections } = await dbGetAllReflections()
+export async function getReflectionsAsync(userId: string): Promise<Reflection[]> {
+  const { reflections } = await dbGetAllReflections(userId)
   return reflections
 }
 
 /** Get a reflection by date from database (async). */
-export async function getReflectionByDateAsync(date: string): Promise<Reflection | null> {
-  return await dbGetReflectionByDate(date)
+export async function getReflectionByDateAsync(userId: string, date: string): Promise<Reflection | null> {
+  return await dbGetReflectionByDate(userId, date)
 }
 
 /** Create or update a reflection for the given date (upsert) in database (async). */
-export async function saveReflectionAsync(input: Omit<Reflection, "id" | "createdAt">): Promise<Reflection> {
-  return await dbUpsertReflection(input)
+export async function saveReflectionAsync(userId: string, input: Omit<Reflection, "id" | "createdAt">): Promise<Reflection> {
+  return await dbUpsertReflection(userId, input)
 }
 
 /** Delete a reflection by date from database (async). */
-export async function deleteReflectionAsync(date: string): Promise<void> {
-  await dbDeleteReflectionByDate(date)
+export async function deleteReflectionAsync(userId: string, date: string): Promise<void> {
+  await dbDeleteReflectionByDate(userId, date)
 }
 
 /** Get reflections within a date range from database (async). */
-export async function getReflectionsByDateRangeAsync(startDate: string, endDate: string): Promise<Reflection[]> {
-  return await dbGetReflectionsByDateRange(startDate, endDate)
+export async function getReflectionsByDateRangeAsync(userId: string, startDate: string, endDate: string): Promise<Reflection[]> {
+  return await dbGetReflectionsByDateRange(userId, startDate, endDate)
 }
 
 /** Get reflection count from database (async). */
-export async function getReflectionCountAsync(): Promise<number> {
-  return await dbGetReflectionCount()
+export async function getReflectionCountAsync(userId: string): Promise<number> {
+  return await dbGetReflectionCount(userId)
 }
 
 // ── Weekly Objectives (Database Async) ────────────────────────────────────
@@ -202,42 +203,42 @@ import {
 } from "./db-weekly-objectives"
 
 /** Return all weekly objectives from database (async). */
-export async function getWeeklyObjectivesAsync(): Promise<WeeklyObjective[]> {
-  return await dbGetAllWeeklyObjectives()
+export async function getWeeklyObjectivesAsync(userId: string): Promise<WeeklyObjective[]> {
+  return await dbGetAllWeeklyObjectives(userId)
 }
 
 /** Return objectives scoped to the given ISO week from database (async). */
-export async function getObjectivesForWeekAsync(weekStart?: string): Promise<WeeklyObjective[]> {
+export async function getObjectivesForWeekAsync(userId: string, weekStart?: string): Promise<WeeklyObjective[]> {
   const ws = weekStart ?? weekStartKey()
-  return await dbGetWeeklyObjectivesByWeek(ws)
+  return await dbGetWeeklyObjectivesByWeek(userId, ws)
 }
 
 /** Create a new weekly objective in database (async). */
-export async function saveWeeklyObjectiveAsync(input: Omit<WeeklyObjective, "id" | "dailyTaskIds" | "createdAt">): Promise<WeeklyObjective> {
-  return await dbCreateWeeklyObjective(input)
+export async function saveWeeklyObjectiveAsync(userId: string, input: Omit<WeeklyObjective, "id" | "dailyTaskIds" | "createdAt">): Promise<WeeklyObjective> {
+  return await dbCreateWeeklyObjective(userId, input)
 }
 
 /** Update a weekly objective by ID in database (async). */
-export async function updateWeeklyObjectiveAsync(id: string, patch: Partial<WeeklyObjective>): Promise<void> {
-  await dbUpdateWeeklyObjective(id, patch)
+export async function updateWeeklyObjectiveAsync(userId: string, id: string, patch: Partial<WeeklyObjective>): Promise<void> {
+  await dbUpdateWeeklyObjective(userId, id, patch)
 }
 
 /** Delete an objective from database (async). CASCADE DELETE handles linked tasks. */
-export async function deleteWeeklyObjectiveAsync(id: string): Promise<void> {
-  await dbDeleteWeeklyObjective(id)
+export async function deleteWeeklyObjectiveAsync(userId: string, id: string): Promise<void> {
+  await dbDeleteWeeklyObjective(userId, id)
 }
 
 /** Return objectives for a specific goal within a given week from database (async). */
-export async function getObjectivesForGoalAsync(goalId: string, weekStart?: string): Promise<WeeklyObjective[]> {
+export async function getObjectivesForGoalAsync(userId: string, goalId: string, weekStart?: string): Promise<WeeklyObjective[]> {
   if (weekStart) {
-    return await dbGetWeeklyObjectivesByGoalAndWeek(goalId, weekStart)
+    return await dbGetWeeklyObjectivesByGoalAndWeek(userId, goalId, weekStart)
   }
-  return await dbGetWeeklyObjectivesByGoal(goalId)
+  return await dbGetWeeklyObjectivesByGoal(userId, goalId)
 }
 
 /** Get weekly objective count from database (async). */
-export async function getWeeklyObjectiveCountAsync(): Promise<number> {
-  return await dbGetWeeklyObjectiveCount()
+export async function getWeeklyObjectiveCountAsync(userId: string): Promise<number> {
+  return await dbGetWeeklyObjectiveCount(userId)
 }
 
 // ── Daily Tasks (Database Async) ──────────────────────────────────────────
@@ -257,56 +258,57 @@ import {
 } from "./db-tasks"
 
 /** Return all tasks from database (async). */
-export async function getDailyTasksAsync(): Promise<Task[]> {
-  return await dbGetAllTasks()
+export async function getDailyTasksAsync(userId: string): Promise<Task[]> {
+  return await dbGetAllTasks(userId)
 }
 
 /** Return tasks scheduled for a specific calendar date from database (async). */
-export async function getTasksForDateAsync(date: string): Promise<Task[]> {
-  return await dbGetTasksByDate(date)
+export async function getTasksForDateAsync(userId: string, date: string): Promise<Task[]> {
+  return await dbGetTasksByDate(userId, date)
 }
 
 /** Create a new daily task in database (async). */
-export async function saveTaskAsync(input: Omit<Task, "id" | "checklist" | "createdAt">): Promise<Task> {
-  return await dbCreateTask(input)
+export async function saveTaskAsync(userId: string, input: Omit<Task, "id" | "checklist" | "createdAt">): Promise<Task> {
+  return await dbCreateTask(userId, input)
 }
 
 /** Update a task by ID in database (async). */
-export async function updateTaskAsync(id: string, patch: Partial<Task>): Promise<void> {
-  await dbUpdateTask(id, patch)
+export async function updateTaskAsync(userId: string, id: string, patch: Partial<Task>): Promise<void> {
+  await dbUpdateTask(userId, id, patch)
 }
 
 /** Delete a task from database (async). CASCADE DELETE handles checklist items. */
-export async function deleteTaskAsync(id: string): Promise<void> {
-  await dbDeleteTask(id)
+export async function deleteTaskAsync(userId: string, id: string): Promise<void> {
+  await dbDeleteTask(userId, id)
 }
 
 /** Return all tasks belonging to a specific weekly objective from database (async). */
-export async function getTasksForObjectiveAsync(objectiveId: string): Promise<Task[]> {
-  return await dbGetTasksByObjective(objectiveId)
+export async function getTasksForObjectiveAsync(userId: string, objectiveId: string): Promise<Task[]> {
+  return await dbGetTasksByObjective(userId, objectiveId)
 }
 
 /** Get task count from database (async). */
-export async function getTaskCountAsync(): Promise<number> {
-  return await dbGetTaskCount()
+export async function getTaskCountAsync(userId: string): Promise<number> {
+  return await dbGetTaskCount(userId)
 }
 
 /** Add a checklist item to a task in database (async). */
-export async function addChecklistItemAsync(taskId: string, text: string): Promise<ChecklistItem> {
-  return await dbAddChecklistItem(taskId, text)
+export async function addChecklistItemAsync(userId: string, taskId: string, text: string): Promise<ChecklistItem> {
+  return await dbAddChecklistItem(userId, taskId, text)
 }
 
 /** Update a checklist item in database (async). */
 export async function updateChecklistItemAsync(
+  userId: string,
   itemId: string,
   updates: { text?: string; done?: boolean }
 ): Promise<ChecklistItem> {
-  return await dbUpdateChecklistItem(itemId, updates)
+  return await dbUpdateChecklistItem(userId, itemId, updates)
 }
 
 /** Delete a checklist item from database (async). */
-export async function deleteChecklistItemAsync(itemId: string): Promise<void> {
-  await dbDeleteChecklistItem(itemId)
+export async function deleteChecklistItemAsync(userId: string, itemId: string): Promise<void> {
+  await dbDeleteChecklistItem(userId, itemId)
 }
 
 // ── Roadmaps (Database Async) ─────────────────────────────────────────────
@@ -330,77 +332,78 @@ import {
 // Legacy Flat Roadmaps
 
 /** Get all legacy roadmap phases for all goals from database (async). */
-export async function getRoadmapsAsync(): Promise<RoadmapMap> {
-  const { roadmaps } = await dbGetRoadmaps()
+export async function getRoadmapsAsync(userId: string): Promise<RoadmapMap> {
+  const { roadmaps } = await dbGetRoadmaps(userId)
   return roadmaps
 }
 
 /** Get legacy roadmap phases for a specific goal from database (async). */
-export async function getRoadmapForGoalAsync(goalId: string): Promise<Phase[]> {
-  return await dbGetRoadmapForGoal(goalId)
+export async function getRoadmapForGoalAsync(userId: string, goalId: string): Promise<Phase[]> {
+  return await dbGetRoadmapForGoal(userId, goalId)
 }
 
 /** Save/replace legacy roadmap phases for a goal in database (async). */
-export async function saveRoadmapForGoalAsync(goalId: string, phases: Phase[]): Promise<void> {
-  await dbSaveRoadmapForGoal(goalId, phases)
+export async function saveRoadmapForGoalAsync(userId: string, goalId: string, phases: Phase[]): Promise<void> {
+  await dbSaveRoadmapForGoal(userId, goalId, phases)
 }
 
 /** Delete all legacy roadmap phases for a goal from database (async). */
-export async function deleteRoadmapForGoalAsync(goalId: string): Promise<void> {
-  await dbDeleteRoadmapForGoal(goalId)
+export async function deleteRoadmapForGoalAsync(userId: string, goalId: string): Promise<void> {
+  await dbDeleteRoadmapForGoal(userId, goalId)
 }
 
 // Hierarchical Roadmap Trees
 
 /** Get all hierarchical roadmap trees for all goals from database (async). */
-export async function getRoadmapTreesAsync(): Promise<Record<string, RoadmapTree>> {
-  const { trees } = await dbGetRoadmapTrees()
+export async function getRoadmapTreesAsync(userId: string): Promise<Record<string, RoadmapTree>> {
+  const { trees } = await dbGetRoadmapTrees(userId)
   return trees
 }
 
 /** Get hierarchical roadmap tree for a specific goal from database (async). */
-export async function getRoadmapTreeAsync(goalId: string): Promise<RoadmapTree> {
-  return await dbGetRoadmapTree(goalId)
+export async function getRoadmapTreeAsync(userId: string, goalId: string): Promise<RoadmapTree> {
+  return await dbGetRoadmapTree(userId, goalId)
 }
 
 /** Save/replace entire roadmap tree for a goal in database (async). */
-export async function saveRoadmapTreeAsync(goalId: string, tree: RoadmapTree): Promise<void> {
-  await dbSaveRoadmapTree(goalId, tree)
+export async function saveRoadmapTreeAsync(userId: string, goalId: string, tree: RoadmapTree): Promise<void> {
+  await dbSaveRoadmapTree(userId, goalId, tree)
 }
 
 /** Delete entire roadmap tree for a goal from database (async). */
-export async function deleteRoadmapTreeAsync(goalId: string): Promise<void> {
-  await dbDeleteRoadmapTree(goalId)
+export async function deleteRoadmapTreeAsync(userId: string, goalId: string): Promise<void> {
+  await dbDeleteRoadmapTree(userId, goalId)
 }
 
 /** Add a single roadmap node in database (async). */
 export async function addRoadmapNodeAsync(
+  userId: string,
   goalId: string,
   node: Omit<RoadmapNode, "id" | "createdAt">
 ): Promise<RoadmapNode> {
-  return await dbAddRoadmapNode(goalId, node)
+  return await dbAddRoadmapNode(userId, goalId, node)
 }
 
 /** Update a roadmap node in database (async). */
 export async function updateRoadmapNodeAsync(
-  goalId: string,
+  userId: string,
   nodeId: string,
   patch: Partial<RoadmapNode>
 ): Promise<void> {
-  await dbUpdateRoadmapNode(nodeId, patch)
+  await dbUpdateRoadmapNode(userId, nodeId, patch)
 }
 
 /** Delete a roadmap node and its descendants from database (async). */
-export async function deleteRoadmapNodeAsync(goalId: string, nodeId: string): Promise<void> {
-  await dbDeleteRoadmapNode(nodeId)
+export async function deleteRoadmapNodeAsync(userId: string, nodeId: string): Promise<void> {
+  await dbDeleteRoadmapNode(userId, nodeId)
 }
 
 /** Get a single roadmap node by ID from database (async). */
-export async function getRoadmapNodeByIdAsync(nodeId: string): Promise<RoadmapNode | null> {
-  return await dbGetRoadmapNodeById(nodeId)
+export async function getRoadmapNodeByIdAsync(userId: string, nodeId: string): Promise<RoadmapNode | null> {
+  return await dbGetRoadmapNodeById(userId, nodeId)
 }
 
 /** Get roadmap node count for a goal from database (async). */
-export async function getRoadmapNodeCountAsync(goalId: string): Promise<number> {
-  return await dbGetRoadmapNodeCount(goalId)
+export async function getRoadmapNodeCountAsync(userId: string, goalId: string): Promise<number> {
+  return await dbGetRoadmapNodeCount(userId, goalId)
 }

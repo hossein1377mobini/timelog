@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getSession } from "@/lib/auth"
 import {
   getRoadmapForGoal,
   saveRoadmapForGoal,
@@ -19,6 +20,8 @@ import type { Phase } from "@/lib/types"
  */
 export async function GET(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const goalId = searchParams.get("goalId")
     const tree = searchParams.get("tree")
@@ -31,11 +34,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (tree === "true") {
-      const roadmapTree = await getRoadmapTree(goalId)
+      const roadmapTree = await getRoadmapTree(session.sub, goalId)
       return NextResponse.json({ tree: roadmapTree })
     }
 
-    const phases = await getRoadmapForGoal(goalId)
+    const phases = await getRoadmapForGoal(session.sub, goalId)
     return NextResponse.json({ phases })
   } catch (error) {
     console.error("GET /api/roadmaps error:", error)
@@ -55,17 +58,19 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: Request) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const body = await request.json()
 
     // Case 1: Save flat roadmap phases
     if (body.phases) {
-      await saveRoadmapForGoal(body.goalId, body.phases as Phase[])
+      await saveRoadmapForGoal(session.sub, body.goalId, body.phases as Phase[])
       return NextResponse.json({ success: true })
     }
 
     // Case 2: Add a roadmap node
     if (body.node) {
-      const node = await addRoadmapNode(body.goalId, body.node)
+      const node = await addRoadmapNode(session.sub, body.goalId, body.node)
       return NextResponse.json(node, { status: 201 })
     }
 
@@ -92,6 +97,8 @@ export async function POST(request: Request) {
  */
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const nodeId = searchParams.get("nodeId")
 
@@ -103,7 +110,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const node = await updateRoadmapNode(nodeId, body)
+    const node = await updateRoadmapNode(session.sub, nodeId, body)
     return NextResponse.json(node)
   } catch (error) {
     console.error("PATCH /api/roadmaps error:", error)
@@ -122,6 +129,8 @@ export async function PATCH(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const nodeId = searchParams.get("nodeId")
 
@@ -132,7 +141,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await deleteRoadmapNode(nodeId)
+    await deleteRoadmapNode(session.sub, nodeId)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("DELETE /api/roadmaps error:", error)

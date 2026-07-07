@@ -245,28 +245,29 @@ export function useAnalyticsData(): AnalyticsData & {
   const [reflections, setReflections] = useState<DbReflection[]>([]);
   const [interruptions, setInterruptions] = useState<DbInterruption[]>([]);
 
-  const load = useCallback(async () => {
-    try {
-      const [s, g, t, r, i] = await Promise.all([
-        fetchSessions(),
-        fetchGoals(),
-        fetchTasks(),
-        fetchReflections(),
-        fetchInterruptions(),
-      ]);
-      setSessions(s);
-      setGoals(g);
-      setTasks(t);
-      setReflections(r);
-      setInterruptions(i);
-    } catch (e) {
-      console.error("Failed to load analytics data:", e);
-    }
-  }, []);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const [s, g, t, r, i] = await Promise.all([
+          fetchSessions(),
+          fetchGoals(),
+          fetchTasks(),
+          fetchReflections(),
+          fetchInterruptions(),
+        ]);
+        if (cancelled) return;
+        setSessions(s);
+        setGoals(g);
+        setTasks(t);
+        setReflections(r);
+        setInterruptions(i);
+      } catch (e) {
+        if (!cancelled) console.error("Failed to load analytics data:", e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const analytics = computeAnalytics(sessions, goals, reflections, tasks, interruptions);
   return { ...analytics, sessions, goals, reflections, interruptions };

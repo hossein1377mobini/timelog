@@ -9,6 +9,7 @@
  */
 
 import type { Goal, Session, Task, Reflection, WeeklyObjective, Interruption, Phase, RoadmapNode, RoadmapTree } from "@/lib/types"
+import { toast } from "sonner"
 
 const BASE = "/api"
 
@@ -30,8 +31,15 @@ async function request<T>(
   }
   const res = await fetch(url, opts)
   if (!res.ok) {
-    const text = await res.text().catch(() => "unknown error")
-    throw new Error(`API ${method} ${path} ${res.status}: ${text}`)
+    let errorMsg: string
+    try {
+      const json = await res.json()
+      errorMsg = json.error || json.message || res.statusText
+    } catch {
+      errorMsg = `Request failed (${res.status})`
+    }
+    toast.error(errorMsg)
+    throw new Error(`API ${method} ${path} ${res.status}: ${errorMsg}`)
   }
   if (res.status === 204) return undefined as T
   return res.json()
@@ -53,7 +61,8 @@ export async function deleteSession(id: string): Promise<void> {
 }
 
 export async function fetchSessionsByDate(date: string): Promise<Session[]> {
-  return request<Session[]>("GET", "/sessions", undefined, { date })
+  const data = await request<{ sessions: Session[] }>("GET", "/sessions", undefined, { date })
+  return data.sessions
 }
 
 // ── Goals ─────────────────────────────────────────────────────────────
@@ -80,11 +89,13 @@ export async function deleteGoal(id: string): Promise<void> {
 // ── Tasks ─────────────────────────────────────────────────────────────
 
 export async function fetchTasks(date?: string): Promise<Task[]> {
-  return request<Task[]>("GET", "/tasks", undefined, date ? { date } : undefined)
+  const data = await request<{ tasks: Task[] }>("GET", "/tasks", undefined, date ? { date } : undefined)
+  return data.tasks
 }
 
 export async function fetchTasksByObjective(objectiveId: string): Promise<Task[]> {
-  return request<Task[]>("GET", "/tasks", undefined, { objectiveId })
+  const data = await request<{ tasks: Task[] }>("GET", "/tasks", undefined, { objectiveId })
+  return data.tasks
 }
 
 export async function createTask(input: Omit<Task, "id" | "createdAt">): Promise<Task> {
@@ -102,7 +113,8 @@ export async function deleteTask(id: string): Promise<void> {
 // ── Reflections ───────────────────────────────────────────────────────
 
 export async function fetchReflections(date?: string): Promise<Reflection[]> {
-  return request<Reflection[]>("GET", "/reflections", undefined, date ? { date } : undefined)
+  const data = await request<{ reflections: Reflection[] }>("GET", "/reflections", undefined, date ? { date } : undefined)
+  return data.reflections
 }
 
 export async function saveReflection(
@@ -118,12 +130,13 @@ export async function deleteReflection(date: string): Promise<void> {
 // ── Weekly Objectives ─────────────────────────────────────────────────
 
 export async function fetchWeeklyObjectives(weekStart?: string): Promise<WeeklyObjective[]> {
-  return request<WeeklyObjective[]>(
+  const data = await request<{ objectives: WeeklyObjective[] }>(
     "GET",
     "/weekly-objectives",
     undefined,
     weekStart ? { weekStart } : undefined,
   )
+  return data.objectives
 }
 
 export async function createWeeklyObjective(

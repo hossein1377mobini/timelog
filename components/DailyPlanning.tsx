@@ -101,34 +101,32 @@ export default function DailyPlanning() {
 
   // ── Storage sync ────────────────────────────────────────────────────────────
 
-  async function applyData() {
-    try {
-      const data = await readInitialData();
-      setGoals(data.goals);
-      setObjectives(data.objectives);
-      setTodayTasks(data.tasks);
-      setObjectiveTasks(data.objectiveTasks);
-      if (data.tasks.length > 0) setEditing(false);
-      if (data.ref) {
-        setAccomplishments(data.ref.accomplishments.join("\n"));
-        setDistractions(data.ref.challenges.join("\n"));
-        setRating(data.ref.rating);
-        setDifferently(data.ref.improvements.join("\n"));
-        setGratitude(
-          data.ref.wins.length >= 3
-            ? [data.ref.wins[0] || "", data.ref.wins[1] || "", data.ref.wins[2] || ""]
-            : ["", "", ""],
-        );
-        setTomorrowFocus(data.ref.tomorrowPlan);
-        setEveningMood(data.ref.mood);
-      }
-    } catch (e) {
-      console.error("Failed to load daily planning data:", e);
-    }
-  }
-
   useEffect(() => {
-    applyData();
+    (async () => {
+      try {
+        const data = await readInitialData();
+        setGoals(data.goals);
+        setObjectives(data.objectives);
+        setTodayTasks(data.tasks);
+        setObjectiveTasks(data.objectiveTasks);
+        if (data.tasks.length > 0) setEditing(false);
+        if (data.ref) {
+          setAccomplishments(data.ref.accomplishments.join("\n"));
+          setDistractions(data.ref.challenges.join("\n"));
+          setRating(data.ref.rating);
+          setDifferently(data.ref.improvements.join("\n"));
+          setGratitude(
+            data.ref.wins.length >= 3
+              ? [data.ref.wins[0] || "", data.ref.wins[1] || "", data.ref.wins[2] || ""]
+              : ["", "", ""],
+          );
+          setTomorrowFocus(data.ref.tomorrowPlan);
+          setEveningMood(data.ref.mood);
+        }
+      } catch (e) {
+        console.error("Failed to load daily planning data:", e);
+      }
+    })();
   }, []);
 
   // ── Derived data ────────────────────────────────────────────────────────────

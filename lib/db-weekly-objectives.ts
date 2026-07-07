@@ -13,12 +13,12 @@ import { notifyDatabaseChange } from "@/lib/db-events"
  * Create a new weekly objective in the database.
  * Returns the created objective with its generated ID.
  */
-export async function createWeeklyObjective(input: Omit<WeeklyObjective, "id" | "dailyTaskIds" | "createdAt">): Promise<WeeklyObjective> {
+export async function createWeeklyObjective(userId: string, input: Omit<WeeklyObjective, "id" | "dailyTaskIds" | "createdAt">): Promise<WeeklyObjective> {
   return withDb(async (client) => {
     const result = await client.query(
       `INSERT INTO weekly_objectives (
-        goal_id, title, description, priority, status, week_start, week_end
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        goal_id, title, description, priority, status, week_start, week_end, user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *`,
       [
         input.goalId,
@@ -28,6 +28,7 @@ export async function createWeeklyObjective(input: Omit<WeeklyObjective, "id" | 
         input.status,
         input.weekStart,
         input.weekEnd,
+        userId,
       ]
     )
     
@@ -51,11 +52,11 @@ export async function createWeeklyObjective(input: Omit<WeeklyObjective, "id" | 
  * Get a weekly objective by ID.
  * Returns null if not found.
  */
-export async function getWeeklyObjectiveById(id: string): Promise<WeeklyObjective | null> {
+export async function getWeeklyObjectiveById(userId: string, id: string): Promise<WeeklyObjective | null> {
   return withDb(async (client) => {
     const result = await client.query(
-      "SELECT * FROM weekly_objectives WHERE id = $1",
-      [id]
+      "SELECT * FROM weekly_objectives WHERE id = $1 AND user_id = $2",
+      [id, userId]
     )
     
     if (result.rows.length === 0) {
@@ -89,13 +90,13 @@ export async function getWeeklyObjectiveById(id: string): Promise<WeeklyObjectiv
  * Get all weekly objectives with pagination support.
  * @param options - Pagination options
  */
-export async function getAllWeeklyObjectives(options?: {
+export async function getAllWeeklyObjectives(userId: string, options?: {
   limit?: number;
   offset?: number;
 }): Promise<WeeklyObjective[]> {
   const limit = options?.limit || 100;
   const offset = options?.offset || 0;
-  
+
   return withDb(async (client) => {
     // Single query with aggregation to avoid N+1
     const result = await client.query(
@@ -108,10 +109,11 @@ export async function getAllWeeklyObjectives(options?: {
         ) as daily_task_ids
       FROM weekly_objectives wo
       LEFT JOIN tasks t ON wo.id = t.objective_id
+      WHERE wo.user_id = $1
       GROUP BY wo.id
       ORDER BY wo.week_start DESC, wo.priority DESC
-      LIMIT $1 OFFSET $2`,
-      [limit, offset]
+      LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
     )
     
     return result.rows.map((row) => ({
@@ -132,7 +134,7 @@ export async function getAllWeeklyObjectives(options?: {
 /**
  * Get weekly objectives for a specific week.
  */
-export async function getWeeklyObjectivesByWeek(weekStart: string): Promise<WeeklyObjective[]> {
+export async function getWeeklyObjectivesByWeek(userId: string, weekStart: string): Promise<WeeklyObjective[]> {
   return withDb(async (client) => {
     // Single query with aggregation to avoid N+1
     const result = await client.query(
@@ -145,10 +147,10 @@ export async function getWeeklyObjectivesByWeek(weekStart: string): Promise<Week
         ) as daily_task_ids
       FROM weekly_objectives wo
       LEFT JOIN tasks t ON wo.id = t.objective_id
-      WHERE wo.week_start = $1
+      WHERE wo.user_id = $1 AND wo.week_start = $2
       GROUP BY wo.id
       ORDER BY wo.priority DESC`,
-      [weekStart]
+      [userId, weekStart]
     )
     
     return result.rows.map((row) => ({
@@ -169,7 +171,7 @@ export async function getWeeklyObjectivesByWeek(weekStart: string): Promise<Week
 /**
  * Get weekly objectives for a specific goal.
  */
-export async function getWeeklyObjectivesByGoal(goalId: string): Promise<WeeklyObjective[]> {
+export async function getWeeklyObjectivesByGoal(userId: string, goalId: string): Promise<WeeklyObjective[]> {
   return withDb(async (client) => {
     // Single query with aggregation to avoid N+1
     const result = await client.query(
@@ -182,10 +184,10 @@ export async function getWeeklyObjectivesByGoal(goalId: string): Promise<WeeklyO
         ) as daily_task_ids
       FROM weekly_objectives wo
       LEFT JOIN tasks t ON wo.id = t.objective_id
-      WHERE wo.goal_id = $1
+      WHERE wo.user_id = $1 AND wo.goal_id = $2
       GROUP BY wo.id
       ORDER BY wo.week_start DESC, wo.priority DESC`,
-      [goalId]
+      [userId, goalId]
     )
     
     return result.rows.map((row) => ({
@@ -206,7 +208,7 @@ export async function getWeeklyObjectivesByGoal(goalId: string): Promise<WeeklyO
 /**
  * Get weekly objectives for a specific goal within a specific week.
  */
-export async function getWeeklyObjectivesByGoalAndWeek(goalId: string, weekStart: string): Promise<WeeklyObjective[]> {
+export async function getWeeklyObjectivesByGoalAndWeek(userId: string, goalId: string, weekStart: string): Promise<WeeklyObjective[]> {
   return withDb(async (client) => {
     // Single query with aggregation to avoid N+1
     const result = await client.query(
@@ -219,10 +221,10 @@ export async function getWeeklyObjectivesByGoalAndWeek(goalId: string, weekStart
         ) as daily_task_ids
       FROM weekly_objectives wo
       LEFT JOIN tasks t ON wo.id = t.objective_id
-      WHERE wo.goal_id = $1 AND wo.week_start = $2
+      WHERE wo.user_id = $1 AND wo.goal_id = $2 AND wo.week_start = $3
       GROUP BY wo.id
       ORDER BY wo.priority DESC`,
-      [goalId, weekStart]
+      [userId, goalId, weekStart]
     )
     
     return result.rows.map((row) => ({
@@ -245,11 +247,13 @@ export async function getWeeklyObjectivesByGoalAndWeek(goalId: string, weekStart
  * Returns the updated objective.
  */
 export async function updateWeeklyObjective(
+  userId: string,
   id: string,
   updates: Partial<Omit<WeeklyObjective, "id" | "dailyTaskIds" | "createdAt">>
 ): Promise<WeeklyObjective> {
   return withDb(async (client) => {
     const fields: string[] = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const values: any[] = []
     let paramIndex = 1
 
@@ -283,14 +287,15 @@ export async function updateWeeklyObjective(
     }
 
     if (fields.length === 0) {
-      const current = await getWeeklyObjectiveById(id)
+      const current = await getWeeklyObjectiveById(userId, id)
       if (!current) throw new Error(`Weekly objective ${id} not found`)
       return current
     }
 
     values.push(id)
+    values.push(userId)
     const { rows } = await client.query(
-      `UPDATE weekly_objectives SET ${fields.join(", ")} WHERE id = $${paramIndex} RETURNING *`,
+      `UPDATE weekly_objectives SET ${fields.join(", ")} WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1} RETURNING *`,
       values,
     )
     if (rows.length === 0) throw new Error(`Weekly objective ${id} not found`)
@@ -320,9 +325,9 @@ export async function updateWeeklyObjective(
  * Delete a weekly objective by ID.
  * CASCADE DELETE will also remove linked tasks.
  */
-export async function deleteWeeklyObjective(id: string): Promise<void> {
+export async function deleteWeeklyObjective(userId: string, id: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM weekly_objectives WHERE id = $1", [id])
+    await client.query("DELETE FROM weekly_objectives WHERE id = $1 AND user_id = $2", [id, userId])
   })
 }
 
@@ -330,18 +335,18 @@ export async function deleteWeeklyObjective(id: string): Promise<void> {
  * Delete all weekly objectives (used for testing/data reset).
  * CASCADE DELETE will also remove all linked tasks.
  */
-export async function deleteAllWeeklyObjectives(): Promise<void> {
+export async function deleteAllWeeklyObjectives(userId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM weekly_objectives")
+    await client.query("DELETE FROM weekly_objectives WHERE user_id = $1", [userId])
   })
 }
 
 /**
  * Get weekly objective count for analytics.
  */
-export async function getWeeklyObjectiveCount(): Promise<number> {
+export async function getWeeklyObjectiveCount(userId: string): Promise<number> {
   return withDb(async (client) => {
-    const { rows } = await client.query("SELECT COUNT(*) as count FROM weekly_objectives")
+    const { rows } = await client.query("SELECT COUNT(*) as count FROM weekly_objectives WHERE user_id = $1", [userId])
     return parseInt(rows[0].count as string, 10)
   })
 }

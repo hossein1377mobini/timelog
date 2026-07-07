@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getSession } from "@/lib/auth"
 import { getAllSessions } from "@/lib/db-sessions"
 import { getAllGoals } from "@/lib/db-goals"
 import { getAllReflections } from "@/lib/db-reflections"
@@ -12,12 +13,15 @@ import { getAllTasks } from "@/lib/db-tasks"
  */
 export async function GET() {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
     const [sessionsResult, goalsResult, reflectionsResult, tasks] =
       await Promise.all([
-        getAllSessions({ limit: 10, offset: 0 }),
-        getAllGoals({ limit: 10, offset: 0 }),
-        getAllReflections({ limit: 5, offset: 0 }),
-        getAllTasks({ limit: 10, offset: 0 }),
+        getAllSessions(session.sub, { limit: 10, offset: 0 }),
+        getAllGoals(session.sub, { limit: 10, offset: 0 }),
+        getAllReflections(session.sub, { limit: 5, offset: 0 }),
+        getAllTasks(session.sub, { limit: 10, offset: 0 }),
       ])
 
     return NextResponse.json({

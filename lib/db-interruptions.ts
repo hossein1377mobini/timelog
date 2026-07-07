@@ -30,13 +30,14 @@ function rowToInterruption(row: Record<string, unknown>): Interruption {
  * Create a new interruption.  Returns the created interruption with its ID.
  */
 export async function createInterruption(
+  userId: string,
   input: Omit<Interruption, "id">,
 ): Promise<Interruption> {
   return withDb(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO interruptions (
-        session_id, type, cause, duration, note, timestamp, recovery_time, severity
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        session_id, type, cause, duration, note, timestamp, recovery_time, severity, user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *`,
       [
         input.sessionId || null,
@@ -47,6 +48,7 @@ export async function createInterruption(
         input.timestamp,
         input.recoveryTime,
         input.severity,
+        userId,
       ],
     )
     return rowToInterruption(rows[0])
@@ -56,7 +58,7 @@ export async function createInterruption(
 /**
  * Get all interruptions, newest first, with pagination.
  */
-export async function getAllInterruptions(options?: {
+export async function getAllInterruptions(userId: string, options?: {
   limit?: number
   offset?: number
 }): Promise<{ interruptions: Interruption[]; total: number }> {
@@ -65,13 +67,13 @@ export async function getAllInterruptions(options?: {
     const offset = options?.offset || 0
 
     const { rows: countRows } = await client.query(
-      "SELECT COUNT(*) as count FROM interruptions",
+      "SELECT COUNT(*) as count FROM interruptions WHERE user_id = $1", [userId],
     )
     const total = parseInt(countRows[0].count as string, 10)
 
     const { rows } = await client.query(
-      "SELECT * FROM interruptions ORDER BY timestamp DESC LIMIT $1 OFFSET $2",
-      [limit, offset],
+      "SELECT * FROM interruptions WHERE user_id = $1 ORDER BY timestamp DESC LIMIT $2 OFFSET $3",
+      [userId, limit, offset],
     )
     return { interruptions: rows.map(rowToInterruption), total }
   })
@@ -81,12 +83,13 @@ export async function getAllInterruptions(options?: {
  * Get interruptions for a specific session, newest first.
  */
 export async function getInterruptionsBySession(
+  userId: string,
   sessionId: string,
 ): Promise<Interruption[]> {
   return withDb(async (client) => {
     const { rows } = await client.query(
-      "SELECT * FROM interruptions WHERE session_id = $1 ORDER BY timestamp DESC",
-      [sessionId],
+      "SELECT * FROM interruptions WHERE user_id = $1 AND session_id = $2 ORDER BY timestamp DESC",
+      [userId, sessionId],
     )
     return rows.map(rowToInterruption)
   })
@@ -96,15 +99,16 @@ export async function getInterruptionsBySession(
  * Get interruptions within a date range.
  */
 export async function getInterruptionsByDateRange(
+  userId: string,
   startDate: string,
   endDate: string,
 ): Promise<Interruption[]> {
   return withDb(async (client) => {
     const { rows } = await client.query(
       `SELECT * FROM interruptions
-       WHERE timestamp::date >= $1::date AND timestamp::date <= $2::date
+       WHERE user_id = $1 AND timestamp::date >= $2::date AND timestamp::date <= $3::date
        ORDER BY timestamp DESC`,
-      [startDate, endDate],
+      [userId, startDate, endDate],
     )
     return rows.map(rowToInterruption)
   })
@@ -113,28 +117,28 @@ export async function getInterruptionsByDateRange(
 /**
  * Delete an interruption by ID.
  */
-export async function deleteInterruption(id: string): Promise<void> {
+export async function deleteInterruption(userId: string, id: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM interruptions WHERE id = $1", [id])
+    await client.query("DELETE FROM interruptions WHERE id = $1 AND user_id = $2", [id, userId])
   })
 }
 
 /**
  * Delete all interruptions (data reset).
  */
-export async function deleteAllInterruptions(): Promise<void> {
+export async function deleteAllInterruptions(userId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM interruptions")
+    await client.query("DELETE FROM interruptions WHERE user_id = $1", [userId])
   })
 }
 
 /**
  * Get total interruption count.
  */
-export async function getInterruptionCount(): Promise<number> {
+export async function getInterruptionCount(userId: string): Promise<number> {
   return withDb(async (client) => {
     const { rows } = await client.query(
-      "SELECT COUNT(*) as count FROM interruptions",
+      "SELECT COUNT(*) as count FROM interruptions WHERE user_id = $1", [userId],
     )
     return parseInt(rows[0].count as string, 10)
   })
@@ -143,10 +147,10 @@ export async function getInterruptionCount(): Promise<number> {
 /**
  * Get total interruption time (sum of durations) in seconds.
  */
-export async function getTotalInterruptionTime(): Promise<number> {
+export async function getTotalInterruptionTime(userId: string): Promise<number> {
   return withDb(async (client) => {
     const { rows } = await client.query(
-      "SELECT COALESCE(SUM(duration), 0) as total FROM interruptions",
+      "SELECT COALESCE(SUM(duration), 0) as total FROM interruptions WHERE user_id = $1", [userId],
     )
     return parseInt(rows[0].total as string, 10)
   })

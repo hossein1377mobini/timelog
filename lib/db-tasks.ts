@@ -43,7 +43,7 @@ async function loadChecklist(client: import("pg").PoolClient, taskId: string): P
 }
 
 const TASK_COLUMNS = `
-  objective_id, title, description, estimated_time, priority, status,
+  user_id, objective_id, title, description, estimated_time, priority, status,
   scheduled_date, scheduled_time, tags, session_id, pomodoro_count
 `
 
@@ -59,12 +59,14 @@ const TASK_SELECT = `
 
 /** Create a new task and return it with its generated ID. */
 export async function createTask(
+  userId: string,
   input: Omit<Task, "id" | "checklist" | "createdAt">,
 ): Promise<Task> {
   return withDb(async (client) => {
     const { rows } = await client.query(
-      `INSERT INTO tasks (${TASK_COLUMNS}) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      `INSERT INTO tasks (${TASK_COLUMNS}) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [
+        userId,
         input.objectiveId,
         input.title,
         input.description,
@@ -83,9 +85,9 @@ export async function createTask(
 }
 
 /** Get a task by ID (includes checklist items). Returns null if not found. */
-export async function getTaskById(id: string): Promise<Task | null> {
+export async function getTaskById(userId: string, id: string): Promise<Task | null> {
   return withDb(async (client) => {
-    const { rows } = await client.query("SELECT * FROM tasks WHERE id = $1", [id])
+    const { rows } = await client.query("SELECT * FROM tasks WHERE id = $1 AND user_id = $2", [id, userId])
     if (rows.length === 0) return null
     const checklist = await loadChecklist(client, id)
     return rowToTask(rows[0], checklist)
@@ -93,7 +95,7 @@ export async function getTaskById(id: string): Promise<Task | null> {
 }
 
 /** Get all tasks with optional pagination. */
-export async function getAllTasks(options?: {
+export async function getAllTasks(userId: string, options?: {
   limit?: number
   offset?: number
 }): Promise<Task[]> {
@@ -104,42 +106,43 @@ export async function getAllTasks(options?: {
       `SELECT ${TASK_SELECT}
        FROM tasks t
        LEFT JOIN checklist_items ci ON t.id = ci.task_id
+       WHERE t.user_id = $1
        GROUP BY t.id
        ORDER BY t.scheduled_date DESC, t.scheduled_time DESC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset],
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, offset],
     )
     return rows.map((r: Record<string, unknown>) => rowToTask(r, (r.checklist ?? []) as ChecklistItem[]))
   })
 }
 
 /** Get tasks scheduled for a specific date. */
-export async function getTasksByDate(date: string): Promise<Task[]> {
+export async function getTasksByDate(userId: string, date: string): Promise<Task[]> {
   return withDb(async (client) => {
     const { rows } = await client.query(
       `SELECT ${TASK_SELECT}
        FROM tasks t
        LEFT JOIN checklist_items ci ON t.id = ci.task_id
-       WHERE t.scheduled_date = $1
+       WHERE t.user_id = $1 AND t.scheduled_date = $2
        GROUP BY t.id
        ORDER BY t.scheduled_time`,
-      [date],
+      [userId, date],
     )
     return rows.map((r: Record<string, unknown>) => rowToTask(r, (r.checklist ?? []) as ChecklistItem[]))
   })
 }
 
 /** Get tasks belonging to a specific weekly objective. */
-export async function getTasksByObjective(objectiveId: string): Promise<Task[]> {
+export async function getTasksByObjective(userId: string, objectiveId: string): Promise<Task[]> {
   return withDb(async (client) => {
     const { rows } = await client.query(
       `SELECT ${TASK_SELECT}
        FROM tasks t
        LEFT JOIN checklist_items ci ON t.id = ci.task_id
-       WHERE t.objective_id = $1
+       WHERE t.user_id = $1 AND t.objective_id = $2
        GROUP BY t.id
        ORDER BY t.scheduled_date, t.scheduled_time`,
-      [objectiveId],
+      [userId, objectiveId],
     )
     return rows.map((r: Record<string, unknown>) => rowToTask(r, (r.checklist ?? []) as ChecklistItem[]))
   })
@@ -147,6 +150,7 @@ export async function getTasksByObjective(objectiveId: string): Promise<Task[]> 
 
 /** Update a task by ID. Returns the updated task. */
 export async function updateTask(
+  userId: string,
   id: string,
   updates: Partial<Omit<Task, "id" | "checklist" | "createdAt">>,
 ): Promise<Task> {
@@ -177,14 +181,15 @@ export async function updateTask(
     }
 
     if (setClauses.length === 0) {
-      const existing = await getTaskById(id)
+      const existing = await getTaskById(userId, id)
       if (!existing) throw new Error(`Task ${id} not found`)
       return existing
     }
 
     values.push(id)
+    values.push(userId)
     const { rows } = await client.query(
-      `UPDATE tasks SET ${setClauses.join(", ")} WHERE id = $${idx} RETURNING *`,
+      `UPDATE tasks SET ${setClauses.join(", ")} WHERE id = $${idx} AND user_id = $${idx + 1} RETURNING *`,
       values,
     )
     if (rows.length === 0) throw new Error(`Task ${id} not found`)
@@ -196,7 +201,7 @@ export async function updateTask(
 // ── Checklist items ──────────────────────────────────────────────────────────
 
 /** Add a checklist item to a task. */
-export async function addChecklistItem(taskId: string, text: string): Promise<ChecklistItem> {
+export async function addChecklistItem(userId: string, taskId: string, text: string): Promise<ChecklistItem> {
   return withDb(async (client) => {
     const { rows: maxRow } = await client.query(
       "SELECT COALESCE(MAX(order_index), -1) AS max_order FROM checklist_items WHERE task_id = $1",
@@ -204,9 +209,9 @@ export async function addChecklistItem(taskId: string, text: string): Promise<Ch
     )
     const orderIndex = (maxRow[0]?.max_order ?? -1) + 1
     const { rows } = await client.query(
-      `INSERT INTO checklist_items (task_id, text, done, order_index)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [taskId, text, false, orderIndex],
+      `INSERT INTO checklist_items (task_id, text, done, order_index, user_id)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [taskId, text, false, orderIndex, userId],
     )
     return { id: rows[0].id as string, text: rows[0].text as string, done: rows[0].done as boolean }
   })
@@ -214,6 +219,7 @@ export async function addChecklistItem(taskId: string, text: string): Promise<Ch
 
 /** Update a checklist item (toggle done or change text). */
 export async function updateChecklistItem(
+  userId: string,
   itemId: string,
   updates: { text?: string; done?: boolean },
 ): Promise<ChecklistItem> {
@@ -231,8 +237,9 @@ export async function updateChecklistItem(
     }
     if (setClauses.length === 0) throw new Error("No updates provided")
     values.push(itemId)
+    values.push(userId)
     const { rows } = await client.query(
-      `UPDATE checklist_items SET ${setClauses.join(", ")} WHERE id = $${idx} RETURNING *`,
+      `UPDATE checklist_items SET ${setClauses.join(", ")} WHERE id = $${idx} AND user_id = $${idx + 1} RETURNING *`,
       values,
     )
     if (rows.length === 0) throw new Error(`Checklist item ${itemId} not found`)
@@ -241,32 +248,32 @@ export async function updateChecklistItem(
 }
 
 /** Delete a checklist item. */
-export async function deleteChecklistItem(itemId: string): Promise<void> {
+export async function deleteChecklistItem(userId: string, itemId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM checklist_items WHERE id = $1", [itemId])
+    await client.query("DELETE FROM checklist_items WHERE id = $1 AND user_id = $2", [itemId, userId])
   })
 }
 
 // ── Delete / utility ─────────────────────────────────────────────────────────
 
 /** Delete a task (CASCADE removes linked checklist items). */
-export async function deleteTask(id: string): Promise<void> {
+export async function deleteTask(userId: string, id: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM tasks WHERE id = $1", [id])
+    await client.query("DELETE FROM tasks WHERE id = $1 AND user_id = $2", [id, userId])
   })
 }
 
 /** Delete all tasks (for testing / data reset). */
-export async function deleteAllTasks(): Promise<void> {
+export async function deleteAllTasks(userId: string): Promise<void> {
   return withDb(async (client) => {
-    await client.query("DELETE FROM tasks")
+    await client.query("DELETE FROM tasks WHERE user_id = $1", [userId])
   })
 }
 
 /** Get task count. */
-export async function getTaskCount(): Promise<number> {
+export async function getTaskCount(userId: string): Promise<number> {
   return withDb(async (client) => {
-    const { rows } = await client.query("SELECT COUNT(*) AS count FROM tasks")
+    const { rows } = await client.query("SELECT COUNT(*) AS count FROM tasks WHERE user_id = $1", [userId])
     return parseInt(rows[0].count as string, 10)
   })
 }

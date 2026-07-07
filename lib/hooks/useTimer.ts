@@ -113,11 +113,14 @@ export function useTimer() {
 
   // ── Auto-transition to "ready" when task is selected ────────────────────
   useEffect(() => {
-    if (timerState === "idle" && taskName) {
-      setTimerState("ready");
-    } else if (timerState === "ready" && !taskName) {
-      setTimerState("idle");
-    }
+    const t = setTimeout(() => {
+      if (timerState === "idle" && taskName) {
+        setTimerState("ready");
+      } else if (timerState === "ready" && !taskName) {
+        setTimerState("idle");
+      }
+    }, 0);
+    return () => clearTimeout(t);
   }, [taskName, timerState]);
 
   // ── Load tasks from DB ─────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getSession } from "@/lib/auth"
 import {
   getAllReflections,
   getReflectionByDate,
@@ -16,13 +17,15 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date")
     const limit = searchParams.get("limit")
     const offset = searchParams.get("offset")
 
     if (date) {
-      const reflection = await getReflectionByDate(date)
+      const reflection = await getReflectionByDate(session.sub, date)
       return NextResponse.json({ reflection })
     }
 
@@ -30,7 +33,7 @@ export async function GET(request: NextRequest) {
     if (limit !== null) options.limit = parseInt(limit, 10)
     if (offset !== null) options.offset = parseInt(offset, 10)
 
-    const result = await getAllReflections(options)
+    const result = await getAllReflections(session.sub, options)
     return NextResponse.json(result)
   } catch (error) {
     console.error("GET /api/reflections error:", error)
@@ -48,9 +51,11 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: Request) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const body = await request.json()
-    const reflection = await upsertReflection(body)
-    return NextResponse.json(reflection, { status: 201 })
+    const newReflection = await upsertReflection(session.sub, body)
+    return NextResponse.json(newReflection, { status: 201 })
   } catch (error) {
     console.error("POST /api/reflections error:", error)
     return NextResponse.json(
@@ -68,6 +73,8 @@ export async function POST(request: Request) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date")
 
@@ -78,7 +85,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await deleteReflectionByDate(date)
+    await deleteReflectionByDate(session.sub, date)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("DELETE /api/reflections error:", error)
