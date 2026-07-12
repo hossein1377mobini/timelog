@@ -158,6 +158,7 @@ export default function WeeklyPlan() {
     if (!title) return;
     await createWeeklyObjective({
       goalId,
+      milestoneId: null,
       title,
       description: newObjDesc.trim(),
       priority: objectives.filter((o) => o.goalId === goalId).length + 1,
@@ -332,19 +333,20 @@ export default function WeeklyPlan() {
               onBack={() => setWizardStep(1)}
               onDone={closeWizard}
               onAddObjective={async (goalId, title, desc) => {
-                await createWeeklyObjective({
-                  goalId,
-                  title,
-                  description: desc,
-                  priority:
-                    objectives.filter((o) => o.goalId === goalId).length + 1,
-                  status: "pending",
-                  weekStart: weekKey,
-                  weekEnd,
-                  dailyTaskIds: [],
-                });
-                await loadData();
-              }}
+                              await createWeeklyObjective({
+                                goalId,
+                                milestoneId: null,
+                                title,
+                                description: desc,
+                                priority:
+                                  objectives.filter((o) => o.goalId === goalId).length + 1,
+                                status: "pending",
+                                weekStart: weekKey,
+                                weekEnd,
+                                dailyTaskIds: [],
+                              });
+                              await loadData();
+                            }}
               onCycleStatus={async (obj) => {
                 await cycleStatus(obj);
               }}

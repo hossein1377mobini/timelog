@@ -7,21 +7,21 @@
 
 import type { WeeklyObjective } from "@/lib/types"
 import { withDb } from "@/lib/db-utils"
-import { notifyDatabaseChange } from "@/lib/db-events"
 
 /**
- * Create a new weekly objective in the database.
+ * Create a new weekly objective
  * Returns the created objective with its generated ID.
  */
 export async function createWeeklyObjective(userId: string, input: Omit<WeeklyObjective, "id" | "dailyTaskIds" | "createdAt">): Promise<WeeklyObjective> {
   return withDb(async (client) => {
     const result = await client.query(
       `INSERT INTO weekly_objectives (
-        goal_id, title, description, priority, status, week_start, week_end, user_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        goal_id, milestone_id, title, description, priority, status, week_start, week_end, user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *`,
       [
         input.goalId,
+        input.milestoneId,
         input.title,
         input.description,
         input.priority,
@@ -36,6 +36,7 @@ export async function createWeeklyObjective(userId: string, input: Omit<WeeklyOb
     return {
       id: row.id,
       goalId: row.goal_id,
+      milestoneId: row.milestone_id,
       title: row.title,
       description: row.description,
       priority: row.priority,
@@ -74,6 +75,7 @@ export async function getWeeklyObjectiveById(userId: string, id: string): Promis
     return {
       id: row.id,
       goalId: row.goal_id,
+      milestoneId: row.milestone_id,
       title: row.title,
       description: row.description,
       priority: row.priority,
@@ -119,6 +121,7 @@ export async function getAllWeeklyObjectives(userId: string, options?: {
     return result.rows.map((row) => ({
       id: row.id,
       goalId: row.goal_id,
+      milestoneId: row.milestone_id,
       title: row.title,
       description: row.description,
       priority: row.priority,
@@ -156,6 +159,7 @@ export async function getWeeklyObjectivesByWeek(userId: string, weekStart: strin
     return result.rows.map((row) => ({
       id: row.id,
       goalId: row.goal_id,
+      milestoneId: row.milestone_id,
       title: row.title,
       description: row.description,
       priority: row.priority,
@@ -193,6 +197,7 @@ export async function getWeeklyObjectivesByGoal(userId: string, goalId: string):
     return result.rows.map((row) => ({
       id: row.id,
       goalId: row.goal_id,
+      milestoneId: row.milestone_id,
       title: row.title,
       description: row.description,
       priority: row.priority,
@@ -230,6 +235,7 @@ export async function getWeeklyObjectivesByGoalAndWeek(userId: string, goalId: s
     return result.rows.map((row) => ({
       id: row.id,
       goalId: row.goal_id,
+      milestoneId: row.milestone_id,
       title: row.title,
       description: row.description,
       priority: row.priority,
@@ -260,6 +266,10 @@ export async function updateWeeklyObjective(
     if (updates.goalId !== undefined) {
       fields.push(`goal_id = $${paramIndex++}`)
       values.push(updates.goalId)
+    }
+    if (updates.milestoneId !== undefined) {
+      fields.push(`milestone_id = $${paramIndex++}`)
+      values.push(updates.milestoneId)
     }
     if (updates.title !== undefined) {
       fields.push(`title = $${paramIndex++}`)
@@ -309,6 +319,7 @@ export async function updateWeeklyObjective(
     return {
       id: row.id,
       goalId: row.goal_id,
+      milestoneId: row.milestone_id,
       title: row.title,
       description: row.description,
       priority: row.priority,

@@ -7,9 +7,8 @@
 
 import type { Task, ChecklistItem } from "@/lib/types"
 import { withDb } from "@/lib/db-utils"
-import { notifyDatabaseChange } from "@/lib/db-events"
 
-// ── Row mapping ──────────────────────────────────────────────────────────────
+
 
 function rowToTask(row: Record<string, unknown>, checklist: ChecklistItem[] = []): Task {
   return {

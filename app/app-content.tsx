@@ -1,34 +1,31 @@
 "use client";
 
-import { useState, useEffect, Suspense, useCallback } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { checkOnboardingAction, completeOnboardingAction } from "@/app/actions";
 import ThemeToggle from "@/components/ThemeToggle";
 import Onboarding from "@/components/Onboarding";
-import { LayoutDashboard, CalendarDays, Zap, History } from "lucide-react";
+import { Target, Flame, BarChart3 } from "lucide-react";
 
-// New tab components
-import Dashboard from "@/components/Dashboard";
-import PlanView from "@/components/PlanView";
-import FocusView from "@/components/FocusView";
-import CalendarHeatmap from "@/components/CalendarHeatmap";
-import WeeklyReport from "@/components/WeeklyReport";
-import SessionHistory from "@/components/SessionHistory";
-import HabitTracker from "@/components/HabitTracker";
+// Tab components
+import FocusView from "@/components/focus-view";
+import GoalsManager from "@/components/GoalsManager";
+import HabitTracker from "@/components/habit-tracker";
+import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 import type { SafeUser } from "@/lib/db-users";
 
 const TABS = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "plan", label: "Plan", icon: CalendarDays },
-  { id: "focus", label: "Focus", icon: Zap },
-  { id: "history", label: "History", icon: History },
+  { id: "goals", label: "Goals", icon: Target },
+  { id: "habits", label: "Habits", icon: Flame },
+  { id: "analytics", label: "Analytics", icon: BarChart3 },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 export default function AppContent({ user }: { user: SafeUser }) {
-  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
+  const [activeTab, setActiveTab] = useState<TabId>("goals");
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [preselectedFocusTask, setPreselectedFocusTask] = useState<{ id: string | null; name: string | null } | null>(null);
+  const [showTimer, setShowTimer] = useState(false);
+  const [timerTask, setTimerTask] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     async function checkOnboarding() {
@@ -54,13 +51,28 @@ export default function AppContent({ user }: { user: SafeUser }) {
     window.location.href = "/login";
   }
 
-  const handleStartFocusFromDashboard = useCallback(
-    (taskId?: string, taskName?: string) => {
-      setPreselectedFocusTask({ id: taskId ?? null, name: taskName ?? null });
-      setActiveTab("focus");
-    },
-    [],
-  );
+  function handleStartTimer(taskId: string, taskName: string) {
+    setTimerTask({ id: taskId, name: taskName });
+    setShowTimer(true);
+  }
+
+  function handleDoneTimer() {
+    setShowTimer(false);
+    setTimerTask(null);
+  }
+
+  // Full-screen timer page (no header/tabs)
+  if (showTimer) {
+    return (
+      <div className="min-h-screen bg-[hsl(var(--canvas))] text-[hsl(var(--body))]">
+        <FocusView
+          preselectedTaskId={timerTask?.id ?? null}
+          preselectedTaskName={timerTask?.name ?? null}
+          onDone={handleDoneTimer}
+        />
+      </div>
+    );
+  }
 
   const renderContent = () => {
     if (showOnboarding) {
@@ -68,26 +80,12 @@ export default function AppContent({ user }: { user: SafeUser }) {
     }
 
     switch (activeTab) {
-      case "dashboard":
-        return <Dashboard onStartFocus={handleStartFocusFromDashboard} />;
-      case "plan":
-        return <PlanView />;
-      case "focus":
-        return (
-          <FocusView
-            preselectedTaskId={preselectedFocusTask?.id ?? null}
-            preselectedTaskName={preselectedFocusTask?.name ?? null}
-          />
-        );
-      case "history":
-        return (
-          <div className="space-y-4">
-            <CalendarHeatmap />
-            <WeeklyReport />
-            <SessionHistory />
-            <HabitTracker />
-          </div>
-        );
+      case "goals":
+        return <GoalsManager />;
+      case "habits":
+        return <HabitTracker />;
+      case "analytics":
+        return <AnalyticsDashboard />;
       default:
         return null;
     }

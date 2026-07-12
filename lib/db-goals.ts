@@ -7,10 +7,9 @@
 
 import type { Goal } from "@/lib/types"
 import { withDb } from "@/lib/db-utils"
-import { notifyDatabaseChange } from "@/lib/db-events"
 
 /**
- * Create a new goal in the database.
+ * Create a new goal
  * Returns the created goal with its generated ID.
  */
 export async function createGoal(userId: string, input: Omit<Goal, "id" | "createdAt" | "updatedAt" | "roadmap">): Promise<Goal> {
@@ -356,6 +355,5 @@ export async function getGoalCountByStatus(userId: string): Promise<Record<strin
 export async function deleteAllGoals(userId: string): Promise<void> {
   return withDb(async (client) => {
     await client.query("DELETE FROM goals WHERE user_id = $1", [userId])
-    notifyDatabaseChange()
   })
 }

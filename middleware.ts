@@ -10,8 +10,16 @@ import { jwtVerify } from "jose"
 
 const SESSION_COOKIE_NAME = "compass_session"
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "compass-dev-secret-min-32-chars!!",
+  getJwtSecret(),
 )
+
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (process.env.NODE_ENV === "production" && !secret) {
+    throw new Error("JWT_SECRET environment variable is required in production")
+  }
+  return secret || "compass-dev-secret-min-32-chars!!"
+}
 
 // Routes that don't need authentication
 const PUBLIC_PATHS = [

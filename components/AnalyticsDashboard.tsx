@@ -8,6 +8,7 @@ import {
   Download,
   Lightbulb,
   Activity,
+  Flame,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,9 +19,10 @@ import {
   AnalyticsInsightsTab,
   AnalyticsGoalsTab,
   AnalyticsComparisonsTab,
+  AnalyticsHabitsTab,
 } from "./analytics";
 
-type Section = "charts" | "insights" | "goals" | "comparisons";
+type Section = "charts" | "insights" | "goals" | "comparisons" | "habits";
 
 export default function AnalyticsDashboard() {
   const [section, setSection] = useState<Section>("charts");
@@ -32,6 +34,7 @@ export default function AnalyticsDashboard() {
     { id: "insights", label: "Insights", icon: Lightbulb },
     { id: "goals", label: "Goals", icon: Target },
     { id: "comparisons", label: "Comparisons", icon: CalendarDays },
+    { id: "habits", label: "Habits", icon: Flame },
   ];
 
   return (
@@ -80,6 +83,9 @@ export default function AnalyticsDashboard() {
         )}
         {section === "comparisons" && (
           <AnalyticsComparisonsTab data={data} />
+        )}
+        {section === "habits" && (
+          <AnalyticsHabitsTab data={data} />
         )}
       </CardContent>
     </Card>

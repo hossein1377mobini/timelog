@@ -7,10 +7,9 @@
 
 import type { Reflection } from "@/lib/types"
 import { withDb } from "@/lib/db-utils"
-import { notifyDatabaseChange } from "@/lib/db-events"
 
 /**
- * Create a new reflection in the database.
+ * Create a new reflection
  * Returns the created reflection with its generated ID.
  */
 export async function createReflection(userId: string, input: Omit<Reflection, "id" | "createdAt">): Promise<Reflection> {
@@ -211,8 +210,6 @@ export async function getReflectionsByDateRange(userId: string, startDate: strin
       "SELECT * FROM reflections WHERE user_id = $1 AND date >= $2 AND date <= $3 ORDER BY date DESC",
       [userId, startDate, endDate]
     )
-    
-    notifyDatabaseChange()
     
     return result.rows.map((row) => ({
       id: row.id,

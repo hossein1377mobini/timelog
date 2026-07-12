@@ -8,9 +8,7 @@
 
 import type { Phase, RoadmapNode, RoadmapTree, RoadmapMap } from "@/lib/types"
 import { withDb, withTransaction } from "@/lib/db-utils"
-import { notifyDatabaseChange } from "@/lib/db-events"
 
-// ── Row mappers ──────────────────────────────────────────────────────────────
 
 function phaseFromRow(row: Record<string, unknown>): Phase {
   return { id: row.id as string, name: row.name as string, done: row.done as boolean }

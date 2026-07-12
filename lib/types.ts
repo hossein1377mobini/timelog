@@ -18,6 +18,9 @@ export type InterruptionType = "distraction" | "external" | "thought" | "break" 
 /** Severity level of an interruption. */
 export type InterruptionSeverity = "low" | "medium" | "high"
 
+/** Status of a habit — active (being tracked) or quit (stopped). */
+export type HabitStatus = "active" | "quit"
+
 /**
  * A high-level goal that the user wants to achieve.
  *
@@ -80,6 +83,7 @@ export type RoadmapMap = Record<ID, Phase[]>
 export interface WeeklyObjective {
   id: ID
   goalId: ID
+  milestoneId: ID | null // New: links to a RoadmapNode
   title: string
   description: string
   priority: number
@@ -174,6 +178,20 @@ export interface Reflection {
 }
 
 /**
+ * A habit the user wants to track daily.
+ *
+ * Each habit belongs to a user and can have many checkin records
+ * (one per day). A habit can be active or quit.
+ */
+export interface Habit {
+  id: ID
+  userId: string
+  name: string
+  status: HabitStatus
+  createdAt: string
+}
+
+/**
  * Allowed values for Goal priority levels.
  */
 export const GOAL_PRIORITIES: GoalPriority[] = ["high", "medium", "low"]
@@ -202,5 +220,10 @@ export const TASK_PRIORITIES: TaskPriority[] = ["high", "medium", "low"]
  * Allowed values for Task lifecycle statuses.
  */
 export const TASK_STATUSES: TaskStatus[] = ["pending", "in-progress", "completed"]
+
+/**
+ * Allowed values for Habit statuses.
+ */
+export const HABIT_STATUSES: HabitStatus[] = ["active", "quit"]
 
 // Utility functions (generateId, formatHM, todayKey, etc.) have been moved to @/lib/utils.ts

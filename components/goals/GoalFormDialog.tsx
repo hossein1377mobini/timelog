@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,6 +12,13 @@ import {
 } from "@/components/ui/dialog"
 import { GOAL_COLORS, EMPTY_GOAL_FORM } from "@/lib/constants"
 import type { FormState } from "./goalHelpers"
+import { Plus, X } from "lucide-react"
+
+interface MilestoneItem {
+  id?: string
+  name: string
+  description: string
+}
 
 interface Props {
   open: boolean
@@ -21,9 +28,21 @@ interface Props {
   errors: Partial<FormState>
   onFieldChange: (key: keyof FormState, val: string | number) => void
   onSave: () => void
+  milestones: MilestoneItem[]
+  onAddMilestone: (name: string) => void
+  onRemoveMilestone: (index: number) => void
 }
 
-export function GoalFormDialog({ open, onClose, editingId, form, errors, onFieldChange, onSave }: Props) {
+export function GoalFormDialog({ open, onClose, editingId, form, errors, onFieldChange, onSave, milestones, onAddMilestone, onRemoveMilestone }: Props) {
+  const [milestoneInput, setMilestoneInput] = useState("")
+
+  function handleAddMilestone() {
+    const name = milestoneInput.trim()
+    if (!name) return
+    onAddMilestone(name)
+    setMilestoneInput("")
+  }
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
@@ -92,6 +111,49 @@ export function GoalFormDialog({ open, onClose, editingId, form, errors, onField
                   style={{ background: c.value }}
                   aria-label={c.name} />
               ))}
+            </div>
+          </div>
+
+          {/* Milestones separator */}
+          <hr className="border-[hsl(var(--hairline))]" />
+
+          {/* Milestones section */}
+          <div className="space-y-2">
+            <label className="text-[12px] font-medium text-[hsl(var(--muted))]">Milestones (optional)</label>
+
+            {/* Existing milestones list */}
+            {milestones.length > 0 && (
+              <div className="space-y-1.5">
+                {milestones.map((m, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-[6px] bg-[hsl(var(--surface-soft))]">
+                    <span className="text-[13px] text-[hsl(var(--body))]">{m.name}</span>
+                    <button
+                      onClick={() => onRemoveMilestone(i)}
+                      className="text-[hsl(var(--muted))] hover:text-[hsl(var(--error))] transition-colors shrink-0"
+                      aria-label="Remove milestone">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add milestone input */}
+            <div className="flex gap-2">
+              <Input value={milestoneInput}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMilestoneInput(e.target.value)}
+                onKeyDown={(e: React.KeyboardEvent) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    handleAddMilestone()
+                  }
+                }}
+                placeholder="Milestone name"
+                className="h-8 text-[13px] flex-1" />
+              <Button size="sm" onClick={handleAddMilestone}
+                className="h-8 text-[12px] px-3 gap-1">
+                <Plus size={12} /> Add
+              </Button>
             </div>
           </div>
         </div>

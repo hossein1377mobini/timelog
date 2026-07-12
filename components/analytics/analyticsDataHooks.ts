@@ -9,6 +9,7 @@ import {
   fetchTasks,
   fetchReflections,
   fetchInterruptions,
+  fetchHabits,
 } from "@/lib/db-client";
 import type {
   Session as DbSession,
@@ -16,6 +17,7 @@ import type {
   Task as DbTask,
   Reflection as DbReflection,
   Interruption as DbInterruption,
+  Habit,
 } from "@/lib/types";
 
 /* ───── Helpers ───── */
@@ -52,6 +54,18 @@ export interface AnalyticsData {
   goalProgress: (DbGoal & { logged: number; pct: number })[];
   monthlyTotals: Record<string, number>;
   monthlyData: [string, number][];
+  // Habit analytics
+  habitStats: {
+    totalHabits: number;
+    activeHabits: number;
+    totalCheckins: number;
+    avgStreak: number;
+    longestStreak: number;
+    habitsAt40: number;
+    habitsAt80: number;
+    dailyCheckins: Record<string, number>;
+  };
+  habits: (Habit & { checkins: string[] })[];
 }
 
 /* ───── Computation ───── */
@@ -62,6 +76,7 @@ export function computeAnalytics(
   reflections: DbReflection[],
   tasks: DbTask[],
   interruptions: DbInterruption[],
+  habits?: (Habit & { checkins: string[] })[],
 ): AnalyticsData {
   const tagTotals: Record<string, number> = {};
   sessions.forEach((s) =>
@@ -202,6 +217,39 @@ export function computeAnalytics(
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-12);
 
+  // Habit analytics
+  const activeHabits = (habits || []).filter(h => h.status === "active");
+  const totalCheckins = activeHabits.reduce((sum, h) => sum + h.checkins.length, 0);
+  
+  // Calculate streaks for each active habit
+  const streaks = activeHabits.map(h => {
+    const checkinSet = new Set(h.checkins);
+    let streak = 0;
+    const today = new Date().toISOString().split("T")[0]!;
+    let checkDate = today;
+    while (checkinSet.has(checkDate)) {
+      streak++;
+      const d = new Date(checkDate);
+      d.setDate(d.getDate() - 1);
+      checkDate = d.toISOString().split("T")[0]!;
+    }
+    return streak;
+  });
+  
+  const avgStreak = streaks.length ? Math.round(streaks.reduce((a, b) => a + b, 0) / streaks.length) : 0;
+  const longestStreak = streaks.length ? Math.max(...streaks) : 0;
+  
+  const habitsAt40 = activeHabits.filter(h => h.checkins.length >= 40).length;
+  const habitsAt80 = activeHabits.filter(h => h.checkins.length >= 80).length;
+  
+  // Daily checkins for heatmap
+  const dailyCheckins: Record<string, number> = {};
+  activeHabits.forEach(h => {
+    h.checkins.forEach(date => {
+      dailyCheckins[date] = (dailyCheckins[date] || 0) + 1;
+    });
+  });
+
   return {
     tagTotals,
     sortedTags,
@@ -228,6 +276,17 @@ export function computeAnalytics(
     goalProgress,
     monthlyTotals,
     monthlyData,
+    habitStats: {
+      totalHabits: (habits || []).length,
+      activeHabits: activeHabits.length,
+      totalCheckins,
+      avgStreak,
+      longestStreak,
+      habitsAt40,
+      habitsAt80,
+      dailyCheckins,
+    },
+    habits: habits || [],
   };
 }
 
@@ -238,23 +297,26 @@ export function useAnalyticsData(): AnalyticsData & {
   goals: DbGoal[];
   reflections: DbReflection[];
   interruptions: DbInterruption[];
+  habits: (Habit & { checkins: string[] })[];
 } {
   const [sessions, setSessions] = useState<DbSession[]>([]);
   const [goals, setGoals] = useState<DbGoal[]>([]);
   const [tasks, setTasks] = useState<DbTask[]>([]);
   const [reflections, setReflections] = useState<DbReflection[]>([]);
   const [interruptions, setInterruptions] = useState<DbInterruption[]>([]);
+  const [habits, setHabits] = useState<(Habit & { checkins: string[] })[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [s, g, t, r, i] = await Promise.all([
+        const [s, g, t, r, i, h] = await Promise.all([
           fetchSessions(),
           fetchGoals(),
           fetchTasks(),
           fetchReflections(),
           fetchInterruptions(),
+          fetchHabits(),
         ]);
         if (cancelled) return;
         setSessions(s);
@@ -262,6 +324,7 @@ export function useAnalyticsData(): AnalyticsData & {
         setTasks(t);
         setReflections(r);
         setInterruptions(i);
+        setHabits(h);
       } catch (e) {
         if (!cancelled) console.error("Failed to load analytics data:", e);
       }
@@ -269,6 +332,6 @@ export function useAnalyticsData(): AnalyticsData & {
     return () => { cancelled = true; };
   }, []);
 
-  const analytics = computeAnalytics(sessions, goals, reflections, tasks, interruptions);
-  return { ...analytics, sessions, goals, reflections, interruptions };
+  const analytics = computeAnalytics(sessions, goals, reflections, tasks, interruptions, habits);
+  return { ...analytics, sessions, goals, reflections, interruptions, habits };
 }

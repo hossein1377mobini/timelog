@@ -5,3 +5,4 @@ export { AnalyticsChartsTab } from "./AnalyticsChartsTab";
 export { AnalyticsInsightsTab } from "./AnalyticsInsightsTab";
 export { AnalyticsGoalsTab } from "./AnalyticsGoalsTab";
 export { AnalyticsComparisonsTab } from "./AnalyticsComparisonsTab";
+export { AnalyticsHabitsTab } from "./AnalyticsHabitsTab";

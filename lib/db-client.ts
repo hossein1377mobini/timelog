@@ -8,7 +8,7 @@
  * to use the permanent database.
  */
 
-import type { Goal, Session, Task, Reflection, WeeklyObjective, Interruption, Phase, RoadmapNode, RoadmapTree } from "@/lib/types"
+import type { Goal, Session, Task, Reflection, WeeklyObjective, Interruption, Phase, RoadmapNode, RoadmapTree, Habit } from "@/lib/types"
 import { toast } from "sonner"
 
 const BASE = "/api"
@@ -202,5 +202,45 @@ export async function updateRoadmapNodeDb(nodeId: string, updates: Partial<Roadm
 }
 
 export async function deleteRoadmapNodeDb(nodeId: string): Promise<void> {
-  await request<void>("DELETE", "/roadmaps", undefined, { nodeId })
+ await request<void>("DELETE", "/roadmaps", undefined, { nodeId })
+}
+
+// ── Habits ──────────────────────────────────────────────────────────
+
+export interface HabitWithCheckins {
+  id: string
+  userId: string
+  name: string
+  status: 'active' | 'quit'
+  createdAt: string
+  checkins: string[]
+}
+
+export async function fetchHabits(): Promise<HabitWithCheckins[]> {
+  const data = await request<{ habits: HabitWithCheckins[] }>("GET", "/habits")
+  return data.habits
+}
+
+export async function createHabitApi(name: string): Promise<HabitWithCheckins> {
+  return request<HabitWithCheckins>("POST", "/habits", { name })
+}
+
+export async function updateHabitStatusApi(id: string, status: 'active' | 'quit'): Promise<void> {
+  await request<void>("PATCH", `/habits?id=${id}`, { status })
+}
+
+export async function deleteHabitApi(id: string): Promise<void> {
+  await request<void>("DELETE", "/habits", undefined, { id })
+}
+
+export async function checkinHabitApi(habitId: string, date: string): Promise<void> {
+  await request<void>("POST", "/habits/checkin", { habitId, date })
+}
+
+export async function uncheckinHabitApi(habitId: string, date: string): Promise<void> {
+  await request<void>("DELETE", "/habits/checkin", undefined, { habitId, date })
+}
+
+export async function resetHabitCheckinsApi(habitId: string): Promise<void> {
+  await request<void>("POST", "/habits/checkin/reset", { habitId })
 }

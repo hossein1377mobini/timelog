@@ -7,10 +7,9 @@
 
 import type { Session } from "@/lib/types"
 import { withDb } from "@/lib/db-utils"
-import { notifyDatabaseChange } from "@/lib/db-events"
 
 /**
- * Create a new session in the database.
+ * Create a new session
  * Returns the created session with its generated ID.
  */
 export async function createSession(userId: string, input: Omit<Session, "id">): Promise<Session> {
@@ -268,7 +267,6 @@ export async function getSessionCount(userId: string): Promise<number> {
 export async function getTotalFocusTime(userId: string): Promise<number> {
   return withDb(async (client) => {
     const result = await client.query("SELECT COALESCE(SUM(duration), 0) as total FROM sessions WHERE user_id = $1", [userId])
-    notifyDatabaseChange()
     return parseInt(result.rows[0].total, 10)
   })
 }
