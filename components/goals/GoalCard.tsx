@@ -1,7 +1,6 @@
 "use client"
-
 import { useState, useEffect } from "react"
-import { ChevronDown, ChevronUp, Edit2, Trash2, Map } from "lucide-react"
+import { ChevronDown, ChevronUp, Edit2, Trash2, Map, Check, ArrowRight } from "lucide-react"
 import { differenceInDays } from "date-fns"
 import type { Goal, Session } from "@/lib/types"
 import { GOAL_COLORS } from "@/lib/constants"
@@ -79,15 +78,22 @@ export function GoalCard({ goal, sessions, onEdit, onDelete }: Props) {
         ))}
       </div>
 
-      {/* Roadmap toggle */}
-      <button onClick={() => setExpanded(e => !e)}
-        className="mt-3 flex items-center gap-1.5 text-[11px] text-[hsl(var(--muted))] hover:text-[hsl(var(--body-strong))] transition-colors">
-        <Map size={11} />
-        {phaseCount > 0 ? `Roadmap · ${phaseCount} phases` : "Roadmap"}
-        {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-      </button>
+      {/* Roadmap section — always prominent */}
+      <div className="mt-3 pt-3 border-t border-[hsl(var(--hairline))]">
+        <button onClick={() => setExpanded(e => !e)}
+          className="w-full flex items-center gap-2 py-1.5 text-[12px] font-medium text-[hsl(var(--body-strong))] hover:text-[hsl(var(--primary))] transition-colors">
+          <Map size={13} className="text-[hsl(var(--primary))]" />
+          <span>Roadmap</span>
+          {phaseCount > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] font-medium">
+              {phaseCount} phases
+            </span>
+          )}
+          <ArrowRight size={12} className={`ml-auto transition-transform ${expanded ? "rotate-90" : ""}`} />
+        </button>
 
-      {expanded && <RoadmapStepper goalId={goal.id} color={color} />}
+        {expanded && <RoadmapStepper goalId={goal.id} color={color} />}
+      </div>
     </div>
   )
 }

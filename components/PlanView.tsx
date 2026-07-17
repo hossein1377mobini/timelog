@@ -1,30 +1,30 @@
-"use client";
+"use client"
 
-import React, { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ListChecks, Target, CalendarDays, ChevronDown, ChevronRight } from "lucide-react";
-import WeeklyPlan from "./WeeklyPlan";
-import DailyPlanning from "./DailyPlanning";
-import YearlyWeeklyCalendar from "./YearlyWeeklyCalendar";
-import GoalsManager from "./GoalsManager";
+import React, { useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { ListChecks, Target, CalendarDays, ChevronDown, ChevronRight, Sun, Moon } from "lucide-react"
+import WeeklyPlan from "./WeeklyPlan"
+import DailyPlanning from "./DailyPlanning"
+import YearlyWeeklyCalendar from "./YearlyWeeklyCalendar"
+import GoalsManager from "./GoalsManager"
 
 export default function PlanView() {
-  const [activeSection, setActiveSection] = useState<"weekly" | "daily" | "yearly" | "goals">("weekly");
+  const [activeSection, setActiveSection] = useState<"weekly" | "daily" | "yearly" | "goals">("weekly")
 
   const sections = [
-    { id: "weekly", label: "Weekly Plan", icon: CalendarDays },
-    { id: "daily", label: "Daily Planning", icon: ListChecks },
-    { id: "yearly", label: "Year Over Year", icon: CalendarDays },
-    { id: "goals", label: "Goals & Roadmaps", icon: Target },
-  ] as const;
+    { id: "weekly", label: "Week", icon: CalendarDays },
+    { id: "daily", label: "Day", icon: ListChecks },
+    { id: "yearly", label: "Year", icon: CalendarDays },
+    { id: "goals", label: "Goals", icon: Target },
+  ] as const
 
   return (
     <div className="space-y-4">
       {/* Section toggle */}
       <div className="flex flex-wrap gap-1.5">
         {sections.map((s) => {
-          const active = activeSection === s.id;
+          const active = activeSection === s.id
           return (
             <button
               key={s.id}
@@ -38,7 +38,7 @@ export default function PlanView() {
               <s.icon size={14} />
               {s.label}
             </button>
-          );
+          )
         })}
       </div>
 
@@ -48,5 +48,5 @@ export default function PlanView() {
       {activeSection === "yearly" && <YearlyWeeklyCalendar />}
       {activeSection === "goals" && <GoalsManager />}
     </div>
-  );
+  )
 }

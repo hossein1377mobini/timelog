@@ -52,7 +52,7 @@ export function renderSequence(
             : "border border-[hsl(var(--hairline))] bg-transparent"
         } ${
           isToday
-            ? "ring-2 ring-[hsl(var(--primary))] ring-offset-1 ring-offset-[hsl(var(--canvas))]"
+            ? "ring-1 ring-[hsl(var(--muted))] ring-offset-1 ring-offset-[hsl(var(--canvas))]"
             : ""
         }`}
         title={`${isCheckedIn ? "✓ " : ""}${dateStr}${isToday ? " (today)" : ""}`}

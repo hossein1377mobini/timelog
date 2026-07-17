@@ -80,7 +80,7 @@ export default function YearGrid({ weeks, currentWeekStart, onWeekClick }: YearG
           const someIncomplete = hasObjectives && !allDone;
 
           let colorClass = "bg-[hsl(var(--surface-strong))]";
-          if (someIncomplete) colorClass = "bg-[hsl(var(--error))]/60";
+          if (someIncomplete) colorClass = "bg-[hsl(var(--error))]/30";
           else if (allDone) colorClass = "bg-[hsl(var(--success))]/60";
           else if (hasObjectives) colorClass = "bg-[hsl(var(--warning))]/60";
 

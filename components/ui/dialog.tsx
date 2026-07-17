@@ -61,7 +61,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed z-50 grid w-full gap-4 bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 outline-none",
+          "fixed z-50 grid w-full gap-4 bg-[hsl(var(--popover))] p-4 text-sm text-[hsl(var(--popover-foreground))] ring-1 ring-foreground/10 outline-none",
           "bottom-0 left-0 right-0 rounded-t-xl max-h-[85dvh] overflow-y-auto",
           "data-open:animate-in data-open:slide-in-from-bottom-full data-open:fade-in-0",
           "data-closed:animate-out data-closed:slide-out-to-bottom-full data-closed:fade-out-0",

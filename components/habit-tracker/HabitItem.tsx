@@ -48,7 +48,7 @@ export default function HabitItem({
         </div>
         <button
           onClick={onQuit}
-          className="w-7 h-7 rounded-[6px] border border-[hsl(var(--hairline))] flex items-center justify-center text-[hsl(var(--muted))] hover:text-[hsl(var(--error))] hover:border-[hsl(var(--error))] transition-all active:scale-95"
+          className="w-7 h-7 rounded-[6px] bg-[hsl(var(--surface-strong))] flex items-center justify-center text-[hsl(var(--muted))] hover:text-[hsl(var(--error))] hover:bg-[hsl(var(--error))]/10 transition-all active:scale-95"
           aria-label="Quit habit"
         >
           <LogOut size={12} />

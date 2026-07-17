@@ -2,9 +2,10 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { checkOnboardingAction, completeOnboardingAction } from "@/app/actions";
+import PlanView from "@/components/PlanView"
 import ThemeToggle from "@/components/ThemeToggle";
 import Onboarding from "@/components/Onboarding";
-import { Target, Flame, BarChart3 } from "lucide-react";
+import { Target, Flame, BarChart3, CalendarDays } from "lucide-react";
 
 // Tab components
 import FocusView from "@/components/focus-view";
@@ -15,6 +16,7 @@ import type { SafeUser } from "@/lib/db-users";
 
 const TABS = [
   { id: "goals", label: "Goals", icon: Target },
+  { id: "plan", label: "Plan", icon: CalendarDays },
   { id: "habits", label: "Habits", icon: Flame },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
 ] as const;
@@ -82,6 +84,8 @@ export default function AppContent({ user }: { user: SafeUser }) {
     switch (activeTab) {
       case "goals":
         return <GoalsManager />;
+      case "plan":
+        return <PlanView />;
       case "habits":
         return <HabitTracker />;
       case "analytics":

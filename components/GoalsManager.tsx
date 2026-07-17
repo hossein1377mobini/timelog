@@ -33,8 +33,8 @@ export default function GoalsManager() {
   const sessions = sessionsData ?? []
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState<FormState>(EMPTY_GOAL_FORM)
-  const [errors, setErrors] = useState<Partial<FormState>>({})
+  const [name, setName] = useState("")
+  const [nameError, setNameError] = useState("")
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [loadingMilestones, setLoadingMilestones] = useState(false)
@@ -49,32 +49,24 @@ export default function GoalsManager() {
 
   async function handleSave() {
     if (!validate()) return
-    const tag = form.tag.trim().startsWith("#") ? form.tag.trim() : `#${form.tag.trim()}`
 
     try {
       let goalId = editingId
 
       if (editingId !== null) {
-        await updateGoal(editingId, {
-          name: form.name.trim(),
-          tag,
-          targetHours: Number(form.targetHours),
-          targetDate: form.deadline,
-          weeklyTarget: Number(form.weeklyTarget),
-          color: form.color,
-        })
+        await updateGoal(editingId, { name: name.trim() })
       } else {
         const newGoal = await createGoal({
-          name: form.name.trim(),
+          name: name.trim(),
           description: "",
           category: "",
-          tag,
-          targetHours: Number(form.targetHours),
-          targetDate: form.deadline,
-          weeklyTarget: Number(form.weeklyTarget),
+          tag: `#${name.trim().toLowerCase().replace(/\s+/g, "-")}`,
+          targetHours: 0,
+          targetDate: "",
+          weeklyTarget: 0,
           priority: "medium",
           status: "active",
-          color: form.color,
+          color: "amber",
         })
         goalId = newGoal.id
       }
@@ -166,23 +158,16 @@ export default function GoalsManager() {
 
   function openAdd() {
     setEditingId(null)
-    setForm(EMPTY_GOAL_FORM)
-    setErrors({})
+    setName("")
+    setNameError("")
     setMilestones([])
     setOpen(true)
   }
 
   async function openEdit(goal: Goal) {
     setEditingId(goal.id)
-    setForm({
-      name: goal.name,
-      tag: goal.tag,
-      targetHours: goal.targetHours,
-      deadline: goal.targetDate || "",
-      weeklyTarget: goal.weeklyTarget,
-      color: goal.color,
-    })
-    setErrors({})
+    setName(goal.name)
+    setNameError("")
     setOpen(true)
 
     // Load existing milestones
@@ -206,18 +191,21 @@ export default function GoalsManager() {
       setLoadingMilestones(false)
     }
   }
-  // Add description field to milestone
-      function addMilestone(name: string) {
-        setMilestones((prev) => [
-          ...prev,
-          { name, description: "", status: "pending" },
-        ])
-  }
 
-  function updateMilestone(index: number, patch: Partial<Milestone>) {
-    setMilestones((prev) =>
-      prev.map((m, i) => (i === index ? { ...m, ...patch } : m))
-    )
+  function addMilestone(milestoneName: string) {
+    const trimmed = milestoneName.trim()
+    if (!trimmed) return
+    
+    // Check for duplicates (case-insensitive)
+    const exists = milestones.some(m => m.name.toLowerCase() === trimmed.toLowerCase())
+    if (exists) {
+      return // Silently ignore duplicates - could add toast later
+    }
+    
+    setMilestones((prev) => [
+      ...prev,
+      { name: trimmed, description: "", status: "pending" },
+    ])
   }
 
   function removeMilestone(index: number) {
@@ -225,18 +213,13 @@ export default function GoalsManager() {
   }
 
   function validate(): boolean {
-    const e: Partial<FormState> = {}
-    if (!form.name.trim()) e.name = "Name is required"
-    if (!form.tag.trim()) e.tag = "Tag is required"
-    if (!form.targetHours || form.targetHours <= 0) e.targetHours = 1
-    if (!form.weeklyTarget || form.weeklyTarget <= 0) e.weeklyTarget = 1
-    setErrors(e)
-    return Object.keys(e).length === 0
-  }
-
-  function setField(key: keyof FormState, val: string | number) {
-    setForm((f) => ({ ...f, [key]: val as never }))
-    if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }))
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setNameError("Name is required")
+      return false
+    }
+    setNameError("")
+    return true
   }
 
   return (
@@ -277,9 +260,14 @@ export default function GoalsManager() {
       </Card>
 
       {/* Goal + Milestones Form Dialog */}
-      <GoalFormDialog open={open} onClose={() => setOpen(false)}
-        editingId={editingId} form={form} errors={errors}
-        onFieldChange={setField} onSave={handleSave}
+      <GoalFormDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        editingId={editingId}
+        name={name}
+        nameError={nameError}
+        onNameChange={setName}
+        onSave={handleSave}
         milestones={milestones}
         onAddMilestone={addMilestone}
         onRemoveMilestone={removeMilestone}
